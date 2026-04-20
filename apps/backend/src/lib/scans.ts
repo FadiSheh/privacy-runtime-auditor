@@ -1,0 +1,150 @@
+import { desc, eq, inArray } from 'drizzle-orm';
+
+import {
+  artifacts,
+  findings,
+  policies,
+  scanDiffs,
+  scanPages,
+  scans,
+  scenarios,
+} from '@pra/db';
+import type { ScanJob } from '@pra/shared';
+import { scanConfigSchema } from '@pra/shared';
+import { createId } from '@pra/utils';
+
+import { getDatabase } from './database';
+import { getProjectById } from './projects';
+import { getScanQueue } from './queue';
+
+export async function createScan(projectId: string, triggeredByUserId?: string | null) {
+  const { db } = await getDatabase();
+  const project = await getProjectById(projectId);
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  const scan = {
+    id: createId('scan'),
+    projectId,
+    status: 'queued',
+    triggeredByUserId: triggeredByUserId ?? null,
+    startedAt: null,
+    finishedAt: null,
+    overallScore: null,
+    riskLevel: null,
+    configJson: scanConfigSchema.parse(project.configJson),
+  };
+
+  await db.insert(scans).values(scan);
+
+  const payload: ScanJob = {
+    id: scan.id,
+    projectId: project.id,
+    rootUrl: project.rootUrl,
+    config: scanConfigSchema.parse(project.configJson),
+  };
+
+  await getScanQueue().add(scan.id, payload, {
+    jobId: scan.id,
+    removeOnComplete: 50,
+    removeOnFail: 50,
+  });
+
+  return scan;
+}
+
+export async function listProjectScans(projectId: string) {
+  const { db } = await getDatabase();
+  return db.select().from(scans).where(eq(scans.projectId, projectId)).orderBy(desc(scans.startedAt));
+}
+
+export async function getScan(scanId: string) {
+  const { db } = await getDatabase();
+  const result = await db.select().from(scans).where(eq(scans.id, scanId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getScanPages(scanId: string) {
+  const { db } = await getDatabase();
+  return db.select().from(scanPages).where(eq(scanPages.scanId, scanId));
+}
+
+export async function getScanFindings(scanId: string) {
+  const { db } = await getDatabase();
+  return db.select().from(findings).where(eq(findings.scanId, scanId)).orderBy(desc(findings.createdAt));
+}
+
+export async function getScanPolicies(scanId: string) {
+  const { db } = await getDatabase();
+  return db.select().from(policies).where(eq(policies.scanId, scanId));
+}
+
+export async function getScanArtifacts(scanId: string) {
+  const { db } = await getDatabase();
+  return db.select().from(artifacts).where(eq(artifacts.scanId, scanId));
+}
+
+export async function getScanStatus(scanId: string) {
+  const scan = await getScan(scanId);
+
+  if (!scan) {
+    return null;
+  }
+
+  const pages = await getScanPages(scanId);
+  const { db } = await getDatabase();
+
+  const scenarioRows = pages.length
+    ? await db
+        .select()
+        .from(scenarios)
+        .where(inArray(scenarios.scanPageId, pages.map((page) => page.id)))
+    : [];
+
+  const completedScenarios = scenarioRows.filter((row) => row.status === 'completed').length;
+  const totalScenarios = scenarioRows.length;
+
+  return {
+    scanId,
+    status: scan.status,
+    startedAt: scan.startedAt,
+    finishedAt: scan.finishedAt,
+    progress:
+      totalScenarios > 0
+        ? Math.round((completedScenarios / totalScenarios) * 100)
+        : scan.status === 'completed'
+          ? 100
+          : 0,
+    pageCount: pages.length,
+    completedScenarios,
+    totalScenarios,
+  };
+}
+
+export async function getScanDiff(scanId: string) {
+  const { db } = await getDatabase();
+  const result = await db.select().from(scanDiffs).where(eq(scanDiffs.comparedScanId, scanId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function setBaseline(scanId: string) {
+  const scan = await getScan(scanId);
+
+  if (!scan) {
+    throw new Error('Scan not found');
+  }
+
+  const priorScans = await listProjectScans(scan.projectId);
+  const baseline = priorScans.find((item) => item.id !== scanId && item.status === 'completed');
+
+  if (!baseline) {
+    throw new Error('No completed scan available to use as baseline');
+  }
+
+  return {
+    baselineScanId: baseline.id,
+    comparedScanId: scanId,
+  };
+}

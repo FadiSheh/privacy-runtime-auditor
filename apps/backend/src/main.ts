@@ -1,10 +1,14 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+import { buildServer } from './server';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const port = process.env.API_PORT || 3001;
-  await app.listen(port, '0.0.0.0');
-  console.log(`API Server running on http://0.0.0.0:${port}`);
+  const server = await buildServer();
+  const port = Number(process.env.API_PORT ?? 3001);
+  const host = process.env.API_HOST ?? '0.0.0.0';
+
+  await server.listen({ port, host });
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
