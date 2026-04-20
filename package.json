@@ -1,0 +1,27 @@
+{
+  "name": "privacy-runtime-auditor",
+  "version": "0.1.0",
+  "description": "Runtime privacy compliance auditing platform",
+  "private": true,
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend",
+    "apps/worker",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm:dev:*\" --kill-others-on-fail",
+    "dev:frontend": "npm --workspace apps/frontend run dev",
+    "dev:backend": "npm --workspace apps/backend run dev",
+    "dev:worker": "npm --workspace apps/worker run dev",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "db:migrate": "npm --workspace apps/backend run db:migrate",
+    "db:seed": "npm --workspace apps/backend run db:seed",
+    "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
