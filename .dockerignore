@@ -1,0 +1,41 @@
+# Git
+.git/
+.gitignore
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Build outputs
+dist/
+.next/
+build/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.iml
+
+# Test results
+test-results/
+coverage/
+
+# Runtime files
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+tmp-test-artifacts/
+
+# Playwright
+.playwright/

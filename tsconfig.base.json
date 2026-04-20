@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "declaration": true,
+    "sourceMap": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@pra/shared": ["packages/shared/src/index.ts"],
+      "@pra/utils": ["packages/utils/src/index.ts"],
+      "@pra/db": ["packages/db/src/index.ts"],
+      "@pra/vendor-registry": ["packages/vendor-registry/src/index.ts"],
+      "@pra/rules-engine": ["packages/rules-engine/src/index.ts"],
+      "@pra/policy-parser": ["packages/policy-parser/src/index.ts"],
+      "@pra/report-generator": ["packages/report-generator/src/index.ts"],
+      "@pra/browser-runner": ["packages/browser-runner/src/index.ts"]
+    }
+  }
+}
