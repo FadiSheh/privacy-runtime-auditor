@@ -33,15 +33,14 @@ services:
 
   api:
     build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/backend/Dockerfile
     container_name: pra_api
     environment:
       - DATABASE_URL=postgresql://pra_user:pra_password@postgres:5432/pra_db
       - REDIS_URL=redis://redis:6379
-      - NODE_ENV=development
+      - NODE_ENV=production
       - API_PORT=3001
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
     ports:
       - "3001:3001"
     depends_on:
@@ -49,45 +48,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./apps/backend:/app
-      - /app/node_modules
 
   worker:
     build:
-      context: ./apps/worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/worker/Dockerfile
     container_name: pra_worker
     environment:
       - DATABASE_URL=postgresql://pra_user:pra_password@postgres:5432/pra_db
       - REDIS_URL=redis://redis:6379
-      - NODE_ENV=development
+      - NODE_ENV=production
       - WORKER_CONCURRENCY=2
+      - STORAGE_PATH=/app/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/worker:/app
-      - /app/node_modules
       - ./data/uploads:/app/data/uploads
 
   frontend:
     build:
-      context: ./apps/frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:3001
     container_name: pra_frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://api:3001
-      - NODE_ENV=development
     ports:
       - "3000:3000"
     depends_on:
       - api
-    volumes:
-      - ./apps/frontend:/app
-      - /app/node_modules
 
 volumes:
   postgres_data:
