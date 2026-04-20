@@ -1,1 +1,1 @@
-export { ScanJob, ScanScenario, Finding, Evidence } from './types';
+export * from './types';

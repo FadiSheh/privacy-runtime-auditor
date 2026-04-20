@@ -1,5 +1,5 @@
 {
-  "name": "@pra/shared",
+  "name": "@pra/db",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,6 +18,10 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "zod": "^3.24.4"
+    "@electric-sql/pglite": "^0.2.17",
+    "@pra/shared": "0.1.0",
+    "@pra/utils": "0.1.0",
+    "drizzle-orm": "^0.43.1",
+    "pg": "^8.15.6"
   }
 }
