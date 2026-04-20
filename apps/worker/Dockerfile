@@ -9,15 +9,25 @@ RUN apk add --no-cache \
     ttf-freefont
 
 # Copy workspace files
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
+COPY package.json package-lock.json ./
 
-# Copy app files
-COPY . .
+# Copy workspace packages and apps
+COPY tsconfig.base.json ./
+COPY packages/ ./packages/
+COPY apps/worker/ ./apps/worker/
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --omit=dev
 
-# Build
-RUN npm run build
+# Build packages and worker
+RUN npm run build --workspace packages/shared
+RUN npm run build --workspace packages/utils
+RUN npm run build --workspace packages/db
+RUN npm run build --workspace packages/vendor-registry
+RUN npm run build --workspace packages/rules-engine
+RUN npm run build --workspace packages/policy-parser
+RUN npm run build --workspace packages/report-generator
+RUN npm run build --workspace packages/browser-runner
+RUN npm run build --workspace apps/worker
 
-CMD ["npm", "run", "start"]
+CMD ["npm", "--workspace", "apps/worker", "run", "start"]

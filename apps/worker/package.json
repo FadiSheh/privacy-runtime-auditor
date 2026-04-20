@@ -3,28 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node src/main.ts",
-    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "build": "tsup src/main.ts --format esm,cjs --dts false --clean",
     "start": "node dist/main.js",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "bull": "^4.11.0",
-    "redis": "^4.6.0",
-    "playwright": "^1.39.0",
-    "@playwright/test": "^1.39.0",
-    "prisma": "^5.4.0",
-    "@prisma/client": "^5.4.0",
-    "ts-node": "^10.9.0",
-    "typescript": "^5.0.0",
+    "@pra/browser-runner": "0.1.0",
+    "@pra/db": "0.1.0",
+    "@pra/policy-parser": "0.1.0",
+    "@pra/report-generator": "0.1.0",
+    "@pra/rules-engine": "0.1.0",
+    "@pra/shared": "0.1.0",
+    "@pra/utils": "0.1.0",
+    "@pra/vendor-registry": "0.1.0",
+    "bullmq": "^5.52.3",
     "dotenv": "^16.3.0",
-    "pino": "^8.17.0",
-    "pino-pretty": "^10.3.0"
+    "drizzle-orm": "^0.43.1",
+    "ioredis": "^5.6.1",
+    "playwright": "^1.53.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "eslint": "^8.50.0",
-    "@typescript-eslint/eslint-plugin": "^6.7.0",
-    "@typescript-eslint/parser": "^6.7.0"
+    "@types/node": "^22.15.3"
   }
 }
