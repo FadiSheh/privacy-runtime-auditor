@@ -1,11 +1,41 @@
-const styles = {
-  critical: 'bg-red-100 text-red-700 border-red-200',
-  high: 'bg-orange-100 text-orange-700 border-orange-200',
-  medium: 'bg-amber-100 text-amber-700 border-amber-200',
-  low: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  info: 'bg-slate-100 text-slate-700 border-slate-200',
-} as const;
+import { C, F } from '../lib/tokens';
 
-export function SeverityBadge({ severity }: { severity: keyof typeof styles }) {
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${styles[severity]}`}>{severity}</span>;
+type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+const config: Record<Severity, { bg: string; fg: string }> = {
+  critical: { bg: C.rust,       fg: '#fff' },
+  high:     { bg: C.orangeBg,   fg: '#6B2F00' },
+  medium:   { bg: C.amberBg,    fg: '#5A4200' },
+  low:      { bg: C.sandDeep,   fg: C.slate },
+  info:     { bg: C.cloud,      fg: C.slate },
+};
+
+interface SeverityBadgeProps {
+  severity: Severity;
+  size?: 'sm' | 'lg';
+}
+
+export function SeverityBadge({ severity, size = 'sm' }: SeverityBadgeProps) {
+  const s = config[severity] ?? config.info;
+  const height = size === 'lg' ? 24 : 18;
+  const fontSize = size === 'lg' ? 10.5 : 9.5;
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      height,
+      padding: '0 8px',
+      background: s.bg,
+      color: s.fg,
+      fontFamily: F.mono,
+      fontSize,
+      fontWeight: 700,
+      letterSpacing: 0.8,
+      border: severity === 'critical' ? 'none' : `1px solid ${C.hairline}`,
+      whiteSpace: 'nowrap',
+    }}>
+      {severity.toUpperCase()}
+    </span>
+  );
 }

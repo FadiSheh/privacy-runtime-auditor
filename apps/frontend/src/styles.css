@@ -1,56 +1,54 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-  --bg: #f4efe7;
-  --panel: rgba(255, 250, 242, 0.92);
-  --ink: #0f1720;
-  --muted: #5e665f;
-  --accent: #8b3a26;
-  --accent-soft: rgba(139, 58, 38, 0.12);
-  --border: rgba(15, 23, 32, 0.1);
-  --success: #34533d;
-  --warning: #b96f1f;
-  --danger: #ab2c2c;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-html {
-  background:
-    radial-gradient(circle at top left, rgba(139, 58, 38, 0.14), transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(52, 83, 61, 0.12), transparent 28%),
-    linear-gradient(180deg, #f8f3eb 0%, #efe6d8 100%);
-  min-height: 100%;
-}
-
+html,
 body {
-  color: var(--ink);
-  font-family: 'IBM Plex Sans', sans-serif;
-  min-height: 100vh;
+  margin: 0;
+  background: #F0EAD6;
+  min-height: 100%;
+  color: #1A1C22;
+  font-family: 'Instrument Sans', sans-serif;
 }
 
-h1,
-h2,
-h3,
-h4 {
-  font-family: 'Space Grotesk', sans-serif;
+@keyframes pra-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
-* {
-  border-color: var(--border);
+@keyframes pra-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-.panel {
-  background: var(--panel);
-  backdrop-filter: blur(20px);
+@keyframes pra-skel {
+  0% { background-position: 0% 0; }
+  100% { background-position: -200% 0; }
 }
 
-.grid-lines {
-  background-image:
-    linear-gradient(rgba(15, 23, 32, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 32, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
+.pra-skel {
+  background: linear-gradient(90deg, #E6DEC3 0%, #F0EAD6 50%, #E6DEC3 100%);
+  background-size: 200% 100%;
+  animation: pra-skel 1.4s linear infinite;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #B73A2B;
+  outline-offset: 2px;
+}
+
+input::placeholder {
+  color: #A8AEB8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
 }
