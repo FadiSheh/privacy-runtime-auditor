@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
 
-import type { NodeDatabase } from './client';
+import type { AnyDatabase } from './client';
 import { organizations, users, vendors } from './schema';
 import { createId } from '@pra/utils';
 
-export async function seedDatabase(db: NodeDatabase) {
+export async function seedDatabase(db: AnyDatabase) {
   const now = new Date();
   const existingOrg = await db.select().from(organizations).limit(1);
 

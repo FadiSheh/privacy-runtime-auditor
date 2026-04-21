@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 
 import { observations, projects, scanPages, scans as scansTable, scenarios } from '@pra/db';
-import type { CompletedScan } from '@pra/shared';
+import type { CompletedScan, Finding, PageKind, PageScanResult, ScenarioScanResult, ScenarioType } from '@pra/shared';
 
 import { calculateScores, riskLevelFromScore } from '@pra/rules-engine';
 
@@ -68,8 +68,8 @@ export async function buildCompletedScanReport(scanId: string): Promise<Complete
         );
 
         return {
-          scenarioType: scenario.scenarioType,
-          status: scenario.status,
+          scenarioType: scenario.scenarioType as ScenarioType,
+          status: scenario.status as ScenarioScanResult['status'],
           consent: {
             present: Boolean(metadata.consentPresent),
             cmpVendor: typeof metadata.cmpVendor === 'string' ? metadata.cmpVendor : null,
@@ -94,21 +94,21 @@ export async function buildCompletedScanReport(scanId: string): Promise<Complete
     return {
       url: page.url,
       normalizedUrl: page.normalizedUrl,
-      pageKind: page.pageKind,
+      pageKind: page.pageKind as PageKind,
       scenarioResults: pageScenarios,
-    };
+    } as PageScanResult;
   });
 
-  const findings = findingRows.map((finding) => ({
+  const findings: Finding[] = findingRows.map((finding) => ({
     id: finding.id,
     scanId: finding.scanId,
     ruleCode: finding.ruleCode,
-    severity: finding.severity,
+    severity: finding.severity as Finding['severity'],
     title: finding.title,
     summary: finding.summary,
     description: finding.description,
     remediation: finding.remediation,
-    status: finding.status,
+    status: finding.status as Finding['status'],
     scoreImpact: finding.scoreImpact,
     evidence: Array.isArray(finding.evidenceJson) ? finding.evidenceJson : [],
   }));

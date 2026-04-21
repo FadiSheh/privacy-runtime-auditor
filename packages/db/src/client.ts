@@ -7,6 +7,7 @@ import * as schema from './schema';
 
 export type NodeDatabase = ReturnType<typeof drizzlePg<typeof schema>>;
 export type MemoryDatabase = ReturnType<typeof drizzlePglite<typeof schema>>;
+export type AnyDatabase = NodeDatabase | MemoryDatabase;
 
 export async function createNodeDatabase(connectionString: string) {
   const pool = new Pool({ connectionString });

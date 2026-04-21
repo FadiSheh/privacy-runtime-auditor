@@ -11,7 +11,7 @@ import {
   scans,
   scenarios,
 } from '@pra/db';
-import type { CompletedScan, PageScanResult, PolicyPage, ScanDiffSummary } from '@pra/shared';
+import type { ArtifactType, CompletedScan, Finding, PageKind, PageScanResult, PolicyPage, RuntimeArtifact, ScanDiffSummary, ScenarioScanResult, ScenarioType, VendorCategory } from '@pra/shared';
 import { createId } from '@pra/utils';
 
 import { getDatabase } from './database';
@@ -193,12 +193,12 @@ export async function loadCompletedScan(scanId: string): Promise<CompletedScan |
   const pages = pageRows.map((page) => ({
     url: page.url,
     normalizedUrl: page.normalizedUrl,
-    pageKind: page.pageKind,
+    pageKind: page.pageKind as PageKind,
     scenarioResults: scenarioRows
       .filter((scenario) => scenario.scanPageId === page.id)
       .map((scenario) => ({
-        scenarioType: scenario.scenarioType,
-        status: scenario.status,
+        scenarioType: scenario.scenarioType as ScenarioType,
+        status: scenario.status as ScenarioScanResult['status'],
         consent: {
           present: Boolean((scenario.metadataJson as Record<string, unknown>).consentPresent),
           cmpVendor: ((scenario.metadataJson as Record<string, unknown>).cmpVendor as string | null) ?? null,
@@ -213,7 +213,7 @@ export async function loadCompletedScan(scanId: string): Promise<CompletedScan |
           .filter((observation) => observation.scenarioId === scenario.id)
           .map((observation) => ({
             id: observation.id,
-            artifactType: observation.artifactType,
+            artifactType: observation.artifactType as ArtifactType,
             name: observation.name,
             domain: observation.domain,
             url: observation.url,
@@ -222,12 +222,12 @@ export async function loadCompletedScan(scanId: string): Promise<CompletedScan |
               observation.rawJson && typeof observation.rawJson === 'object' && 'vendorName' in observation.rawJson
                 ? String((observation.rawJson as Record<string, unknown>).vendorName)
                 : null,
-            category: observation.category,
+            category: observation.category as VendorCategory | null,
             firstParty: observation.firstParty,
             confidence: observation.confidence === null ? null : observation.confidence / 100,
             timestampOffsetMs: observation.timestampOffsetMs,
             raw: observation.rawJson as Record<string, unknown>,
-          })),
+          })) as RuntimeArtifact[],
         screenshotPath:
           artifactRows.find(
             (artifact) =>
@@ -260,15 +260,15 @@ export async function loadCompletedScan(scanId: string): Promise<CompletedScan |
       id: finding.id,
       scanId: finding.scanId,
       ruleCode: finding.ruleCode,
-      severity: finding.severity,
+      severity: finding.severity as Finding['severity'],
       title: finding.title,
       summary: finding.summary,
       description: finding.description,
       remediation: finding.remediation,
-      status: finding.status,
+      status: finding.status as Finding['status'],
       scoreImpact: finding.scoreImpact,
       evidence: Array.isArray(finding.evidenceJson) ? finding.evidenceJson : [],
-    })),
+    })) as Finding[],
     scores: {
       overall: scan.overallScore ?? 0,
       preConsentBehavior: scan.overallScore ?? 0,
