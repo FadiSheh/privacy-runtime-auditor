@@ -118,7 +118,7 @@ export default function DocsPage() {
             <Callout title="EXAMPLE: ONE COMPLETE RUN">
               You create a project for https://shop.example.com, start a scan, PRA discovers the homepage plus product, contact, and policy links,
               runs four consent scenarios on each page, notices Google Analytics requests before consent and after reject-all, parses the privacy policy,
-              and returns findings such as "Non-essential tracking before consent" and "Reject-all ineffective" together with screenshots, URLs, and vendor names.
+              and returns findings such as &quot;Non-essential tracking before consent&quot; and &quot;Reject-all ineffective&quot; together with screenshots, URLs, and vendor names.
             </Callout>
           </Section>
 
