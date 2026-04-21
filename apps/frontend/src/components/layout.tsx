@@ -64,23 +64,6 @@ export function Layout({ children, activeNav = 'projects', headerRight }: PropsW
 
         {headerRight}
 
-        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.sandDeeper, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span>audit.firm / user@</span>
-          <div style={{
-            width: 28,
-            height: 28,
-            background: C.sand,
-            color: C.ink,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: 11,
-            fontFamily: F.mono,
-          }}>
-            MK
-          </div>
-        </div>
       </header>
 
       {children}

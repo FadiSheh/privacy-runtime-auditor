@@ -16,16 +16,6 @@ export const migrations = [
         updated_at TIMESTAMPTZ NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        organization_id TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
         organization_id TEXT NOT NULL,
@@ -42,7 +32,6 @@ export const migrations = [
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         status TEXT NOT NULL,
-        triggered_by_user_id TEXT,
         started_at TIMESTAMPTZ,
         finished_at TIMESTAMPTZ,
         overall_score INTEGER,
@@ -151,6 +140,13 @@ export const migrations = [
     id: '0002_add_scan_activity_tracking',
     sql: `
       ALTER TABLE scans ADD COLUMN IF NOT EXISTS current_activity_json JSONB;
+    `,
+  },
+  {
+    id: '0003_remove_user_concepts',
+    sql: `
+      DROP TABLE IF EXISTS users;
+      ALTER TABLE scans DROP COLUMN IF EXISTS triggered_by_user_id;
     `,
   },
 ] as const;

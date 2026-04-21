@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { AnyDatabase } from './client';
-import { organizations, users, vendors } from './schema';
+import { organizations, vendors } from './schema';
 import { createId } from '@pra/utils';
 
 export async function seedDatabase(db: AnyDatabase) {
@@ -10,21 +10,10 @@ export async function seedDatabase(db: AnyDatabase) {
 
   if (existingOrg.length === 0) {
     const organizationId = createId('org');
-    const userId = createId('user');
 
     await db.insert(organizations).values({
       id: organizationId,
       name: 'Demo Organization',
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await db.insert(users).values({
-      id: userId,
-      organizationId,
-      email: 'demo@pra.local',
-      passwordHash: '$2b$10$P8nRPGX84W0m1BdV6Jc4Eeq2a5B0M4m5j4sBf9x1xYk2VLGHnKwGa',
-      role: 'admin',
       createdAt: now,
       updatedAt: now,
     });

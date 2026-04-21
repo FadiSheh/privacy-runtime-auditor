@@ -7,16 +7,6 @@ export const organizations = pgTable('organizations', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 });
 
-export const users = pgTable('users', {
-  id: text('id').primaryKey(),
-  organizationId: text('organization_id').notNull(),
-  email: text('email').notNull(),
-  passwordHash: text('password_hash').notNull(),
-  role: text('role').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
-});
-
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').notNull(),
@@ -33,7 +23,6 @@ export const scans = pgTable('scans', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull(),
   status: text('status').notNull(),
-  triggeredByUserId: text('triggered_by_user_id'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   overallScore: integer('overall_score'),

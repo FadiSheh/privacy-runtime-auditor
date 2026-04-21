@@ -17,7 +17,7 @@ import { getDatabase } from './database';
 import { getProjectById } from './projects';
 import { getScanQueue } from './queue';
 
-export async function createScan(projectId: string, triggeredByUserId?: string | null) {
+export async function createScan(projectId: string) {
   const { db } = await getDatabase();
   const project = await getProjectById(projectId);
 
@@ -29,7 +29,6 @@ export async function createScan(projectId: string, triggeredByUserId?: string |
     id: createId('scan'),
     projectId,
     status: 'queued',
-    triggeredByUserId: triggeredByUserId ?? null,
     startedAt: null,
     finishedAt: null,
     overallScore: null,

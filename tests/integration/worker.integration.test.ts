@@ -53,7 +53,6 @@ describe('worker scan orchestration', () => {
       id: 'scan_fixture',
       projectId: 'project_fixture',
       status: 'queued',
-      triggeredByUserId: null,
       startedAt: null,
       finishedAt: null,
       overallScore: null,

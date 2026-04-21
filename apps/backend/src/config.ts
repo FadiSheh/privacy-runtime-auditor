@@ -8,8 +8,6 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   STORAGE_PATH: z.string().default('./data/uploads'),
   LOG_LEVEL: z.string().default('info'),
-  DEMO_EMAIL: z.string().default('demo@pra.local'),
-  DEMO_PASSWORD: z.string().default('demo-password'),
   ALLOW_PRIVATE_TARGETS: z.string().optional(),
   INLINE_SCANS: z.string().optional(),
 });

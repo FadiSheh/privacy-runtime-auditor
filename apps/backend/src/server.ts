@@ -48,10 +48,6 @@ const projectInputSchema = z.object({
   config: z.unknown().optional(),
 });
 
-const scanInputSchema = z.object({
-  triggeredByUserId: z.string().optional(),
-});
-
 export async function buildServer() {
   const app = Fastify({
     loggerInstance: logger,
@@ -68,20 +64,6 @@ export async function buildServer() {
       migrations: migrations.map((item) => item.id),
     };
   });
-
-  app.post('/auth/login', async () => {
-    const config = getConfig();
-    return {
-      user: {
-        email: config.DEMO_EMAIL,
-        role: 'admin',
-      },
-      token: 'demo-token',
-    };
-  });
-
-  app.post('/auth/logout', async () => ({ success: true }));
-  app.get('/auth/me', async () => ({ email: getConfig().DEMO_EMAIL, role: 'admin' }));
 
   app.get('/projects', async () => listProjects());
   app.post('/projects', async (request, reply) => {
@@ -135,8 +117,7 @@ export async function buildServer() {
     const typedRequest = request as FastifyRequest<{ Params: { id: string }; Body: unknown }>;
     const typedReply = reply as FastifyReply;
     const params = z.object({ id: z.string() }).parse(typedRequest.params);
-    const input = scanInputSchema.parse(typedRequest.body ?? {});
-    const scan = await createScan(params.id, input.triggeredByUserId);
+    const scan = await createScan(params.id);
     typedReply.code(201);
     return scan;
   });
