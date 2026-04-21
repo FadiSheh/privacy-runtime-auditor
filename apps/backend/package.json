@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsup src/main.ts src/migrate.ts src/seed.ts --format esm,cjs --dts false --clean",
-    "start": "node dist/main.js",
+    "build": "tsup src/main.ts src/migrate.ts src/seed.ts --format esm,cjs --clean",
+    "start": "node dist/main.mjs",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "tsx src/migrate.ts",
-    "db:seed": "tsx src/seed.ts"
+    "db:seed": "tsx src/seed.ts",
+    "db:migrate:prod": "node dist/migrate.mjs",
+    "db:seed:prod": "node dist/seed.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
