@@ -25,7 +25,7 @@ Multi-service monorepo architecture:
 
 ## Project Structure
 
-```
+```text
 ├── apps/
 │   ├── frontend/              # Next.js web application
 │   ├── backend/               # Fastify API server
@@ -53,22 +53,28 @@ Multi-service monorepo architecture:
 
 ### Prerequisites
 
-- Docker & Docker Compose 3.8+ (recommended for local development)
-- OR Node.js 18+, PostgreSQL 16+, Redis 7+
+- Docker with Compose support (recommended for local development)
+- OR Node.js 22+, PostgreSQL 16+, Redis 7+
 
 ### With Docker Compose (Recommended)
 
 ```bash
 # Start all services (frontend, backend, worker, postgres, redis)
-docker-compose up
+docker compose up
 
 # In a separate terminal, run migrations and seed data
-docker-compose exec api npm --workspace apps/backend run db:migrate
-docker-compose exec api npm --workspace apps/backend run db:seed
+docker compose exec api npm --workspace apps/backend run db:migrate
+docker compose exec api npm --workspace apps/backend run db:seed
 
 # Access the application
 # Frontend:  http://localhost:3000
 # Backend:   http://localhost:3001
+```
+
+If port 3000 is already in use, start the frontend on another host port:
+
+```bash
+FRONTEND_PORT=3002 docker compose up
 ```
 
 ### Local Development (Without Docker)
@@ -79,7 +85,7 @@ docker-compose exec api npm --workspace apps/backend run db:seed
 npm install
 ```
 
-2. Set up environment:
+1. Set up environment:
 
 ```bash
 cp .env.example .env
@@ -88,14 +94,14 @@ export DATABASE_URL="postgresql://user:password@localhost:5432/pra_db"
 export REDIS_URL="redis://localhost:6379"
 ```
 
-3. Set up database:
+1. Set up database:
 
 ```bash
 npm run db:migrate
 npm run db:seed
 ```
 
-4. Start services in separate terminals:
+1. Start services in separate terminals:
 
 ```bash
 # Terminal 1: Backend API
@@ -172,16 +178,16 @@ Runs ESLint on all source files.
 
 ```bash
 # Build images
-docker-compose build
+docker compose build
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
 ## API Endpoints
