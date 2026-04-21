@@ -21,11 +21,13 @@ export async function markScanRunning(scanId: string) {
   await db.update(scans).set({ status: 'running', startedAt: new Date() }).where(eq(scans.id, scanId));
 }
 
-export async function persistCompletedScan(scan: CompletedScan, baselineScanId?: string | null) {
+export async function persistCompletedScan(scan: CompletedScan, baselineScanId?: string | null, pagesAlreadyPersisted = false) {
   const { db } = await getDatabase();
 
-  for (const page of scan.pages) {
-    await persistPage(scan.scanId, page);
+  if (!pagesAlreadyPersisted) {
+    for (const page of scan.pages) {
+      await persistPage(scan.scanId, page);
+    }
   }
 
   for (const policy of scan.policies) {
@@ -75,6 +77,114 @@ export async function persistCompletedScan(scan: CompletedScan, baselineScanId?:
   }).where(eq(scans.id, scan.scanId));
 }
 
+export async function createPageStubs(scanId: string, pages: Array<{ url: string; pageKind: string }>, scenariosPerPage: number): Promise<void> {
+  const { db } = await getDatabase();
+  for (const page of pages) {
+    const pageId = createId('page');
+    await db.insert(scanPages).values({
+      id: pageId,
+      scanId,
+      url: page.url,
+      normalizedUrl: page.url,
+      pageKind: page.pageKind,
+      status: 'pending',
+      screenshotPath: null,
+      createdAt: new Date(),
+    });
+    for (let i = 0; i < scenariosPerPage; i++) {
+      await db.insert(scenarios).values({
+        id: createId('scenario'),
+        scanPageId: pageId,
+        scenarioType: ['no-consent', 'accept-all', 'reject-all', 'granular'][i] ?? 'no-consent',
+        status: 'pending',
+        startedAt: null,
+        finishedAt: null,
+        metadataJson: {},
+      });
+    }
+  }
+}
+
+export async function persistPageIncremental(scanId: string, page: PageScanResult): Promise<void> {
+  const { db } = await getDatabase();
+
+  // Find the stub page row for this URL and update it
+  const stubRows = await db.select().from(scanPages).where(eq(scanPages.scanId, scanId));
+  const stub = stubRows.find((r) => r.url === page.url || r.url === page.normalizedUrl);
+
+  if (stub) {
+    // Update the stub page to completed
+    await db.update(scanPages).set({
+      normalizedUrl: page.normalizedUrl,
+      pageKind: page.pageKind,
+      status: 'completed',
+      screenshotPath: page.scenarioResults[0]?.screenshotPath ?? null,
+    }).where(eq(scanPages.id, stub.id));
+
+    // Get existing stub scenarios for this page and update them one by one
+    const stubScenarios = await db.select().from(scenarios).where(eq(scenarios.scanPageId, stub.id));
+
+    for (const [idx, scenarioResult] of page.scenarioResults.entries()) {
+      const stubScenario = stubScenarios[idx];
+      if (stubScenario) {
+        await db.update(scenarios).set({
+          scenarioType: scenarioResult.scenarioType,
+          status: scenarioResult.status,
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          metadataJson: {
+            ...scenarioResult.metadata,
+            consentPresent: scenarioResult.consent.present,
+            cmpVendor: scenarioResult.consent.cmpVendor,
+            rejectVisible: scenarioResult.consent.rejectVisible,
+            granularControlsPresent: scenarioResult.consent.granularControlsPresent,
+            bannerText: scenarioResult.consent.bannerText,
+            htmlSnippet: scenarioResult.consent.htmlSnippet,
+            buttons: scenarioResult.consent.buttons,
+            limitations: scenarioResult.consent.limitations,
+            domEvidence: scenarioResult.domEvidence,
+            errorMessage: scenarioResult.errorMessage,
+          },
+        }).where(eq(scenarios.id, stubScenario.id));
+
+        if (scenarioResult.screenshotPath) {
+          await db.insert(artifacts).values({
+            id: createId('artifact'),
+            scanId,
+            kind: 'screenshot',
+            path: scenarioResult.screenshotPath,
+            metadataJson: { scenarioType: scenarioResult.scenarioType, pageUrl: page.url },
+            createdAt: new Date(),
+          });
+        }
+
+        for (const artifact of scenarioResult.artifacts) {
+          await db.insert(observations).values({
+            id: artifact.id,
+            scenarioId: stubScenario.id,
+            artifactType: artifact.artifactType,
+            name: artifact.name,
+            domain: artifact.domain,
+            url: artifact.url,
+            vendorId: artifact.vendorId,
+            category: artifact.category,
+            firstParty: artifact.firstParty,
+            confidence: artifact.confidence === null ? null : Math.round((artifact.confidence ?? 0) * 100),
+            timestampOffsetMs: artifact.timestampOffsetMs,
+            rawJson: {
+              vendorName: artifact.vendorName,
+              ...artifact.raw,
+            },
+          });
+        }
+      }
+    }
+  } else {
+    // No stub found — fall back to full persist
+    await persistPage(scanId, page);
+  }
+}
+
 export async function markScanFailed(scanId: string, errorMessage: string) {
   const { db } = await getDatabase();
   await db.update(scans).set({
@@ -83,6 +193,18 @@ export async function markScanFailed(scanId: string, errorMessage: string) {
     riskLevel: 'high',
     configJson: { errorMessage },
   }).where(eq(scans.id, scanId));
+}
+
+export async function markScanCancelled(scanId: string) {
+  const { db } = await getDatabase();
+  const existing = await db.select().from(scans).where(eq(scans.id, scanId)).limit(1);
+  // Only update if the DB hasn't already been set to cancelled by the API
+  if (existing[0] && existing[0].status !== 'cancelled') {
+    await db.update(scans).set({
+      status: 'cancelled',
+      finishedAt: new Date(),
+    }).where(eq(scans.id, scanId));
+  }
 }
 
 export async function loadLatestCompletedScan(projectId: string, excludeScanId: string) {

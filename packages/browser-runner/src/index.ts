@@ -105,6 +105,8 @@ export interface BrowserScanOptions {
   rootUrl: string;
   config: ScanConfig;
   outputPath: string;
+  onDiscovery?: (pages: Array<{ url: string; pageKind: PageKind }>, scenariosPerPage: number) => Promise<void>;
+  onPageComplete?: (page: PageScanResult, completedPages: number, totalPages: number) => Promise<void>;
 }
 
 export interface BrowserScanResult {
@@ -170,19 +172,29 @@ export async function runBrowserScan(options: BrowserScanOptions): Promise<Brows
   const homepageHtml = await fetchPageHtml(options.rootUrl);
   const pages: PageScanResult[] = [];
 
-  for (const pageInfo of discoveredPages) {
+  if (options.onDiscovery) {
+    await options.onDiscovery(discoveredPages, scenarioSequence.length);
+  }
+
+  for (const [index, pageInfo] of discoveredPages.entries()) {
     const scenarioResults: ScenarioScanResult[] = [];
 
     for (const scenarioType of scenarioSequence) {
       scenarioResults.push(await runScenario(pageInfo.url, pageInfo.pageKind, scenarioType, options));
     }
 
-    pages.push({
+    const completedPage: PageScanResult = {
       url: pageInfo.url,
       normalizedUrl: normalizeUrl(pageInfo.url),
       pageKind: pageInfo.pageKind,
       scenarioResults,
-    });
+    };
+
+    pages.push(completedPage);
+
+    if (options.onPageComplete) {
+      await options.onPageComplete(completedPage, index + 1, discoveredPages.length);
+    }
   }
 
   return {

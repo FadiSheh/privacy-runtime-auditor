@@ -8,22 +8,46 @@ import type { ScanJob } from '@pra/shared';
 import { createLogger } from '@pra/utils';
 
 import { getWorkerConfig } from './lib/config';
-import { buildDiffSummary, loadCompletedScan, loadLatestCompletedScan, markScanFailed, markScanRunning, persistCompletedScan, toCompletedScanFromStored } from './lib/persist';
+import { buildDiffSummary, loadCompletedScan, loadLatestCompletedScan, markScanFailed, markScanRunning, markScanCancelled, persistCompletedScan, persistPageIncremental, createPageStubs, toCompletedScanFromStored } from './lib/persist';
 
 const logger = createLogger('pra-worker');
 const scanQueueName = 'pra-scan-queue';
+
+class ScanCancelledError extends Error {
+  constructor(scanId: string) {
+    super(`Scan ${scanId} was cancelled`);
+    this.name = 'ScanCancelledError';
+  }
+}
 
 export async function processScanJob(jobData: ScanJob) {
   logger.info({ scanId: jobData.id }, 'Received scan job');
   await markScanRunning(jobData.id);
 
+  const config = getWorkerConfig();
+  const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+
+  async function isCancelled(): Promise<boolean> {
+    const flag = await redis.get(`pra:cancel:${jobData.id}`);
+    return flag === '1';
+  }
+
   try {
-    const config = getWorkerConfig();
     const outputPath = `${config.STORAGE_PATH}/${jobData.id}`;
     const browserScan = await runBrowserScan({
       rootUrl: jobData.rootUrl,
       config: jobData.config,
       outputPath,
+      onDiscovery: async (pages, scenariosPerPage) => {
+        if (await isCancelled()) throw new ScanCancelledError(jobData.id);
+        logger.info({ scanId: jobData.id, pageCount: pages.length, scenariosPerPage }, 'Pages discovered — creating stubs');
+        await createPageStubs(jobData.id, pages, scenariosPerPage);
+      },
+      onPageComplete: async (page, completedPages, totalPages) => {
+        if (await isCancelled()) throw new ScanCancelledError(jobData.id);
+        logger.info({ scanId: jobData.id, url: page.url, completedPages, totalPages }, 'Page complete — persisting incrementally');
+        await persistPageIncremental(jobData.id, page);
+      },
     });
 
     const policyLinks = discoverPolicyLinks(browserScan.homepageHtml, jobData.rootUrl).slice(0, 2);
@@ -89,11 +113,18 @@ export async function processScanJob(jobData: ScanJob) {
       finishedAt: new Date().toISOString(),
     };
 
-    await persistCompletedScan(report, baselineRow?.id ?? null);
+    await persistCompletedScan(report, baselineRow?.id ?? null, true);
     return { scanId: jobData.id };
   } catch (error) {
-    await markScanFailed(jobData.id, error instanceof Error ? error.message : 'Unknown scan failure');
+    if (error instanceof ScanCancelledError) {
+      logger.info({ scanId: jobData.id }, 'Scan was cancelled');
+      await markScanCancelled(jobData.id);
+    } else {
+      await markScanFailed(jobData.id, error instanceof Error ? error.message : 'Unknown scan failure');
+    }
     throw error;
+  } finally {
+    await redis.quit();
   }
 }
 
