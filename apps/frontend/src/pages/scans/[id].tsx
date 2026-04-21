@@ -15,6 +15,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 function usePollingScan(scanId: string) {
   const [status, setStatus] = useState<ScanStatus | null>(null);
   const [report, setReport] = useState<ScanReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!scanId) return;
@@ -22,16 +23,23 @@ function usePollingScan(scanId: string) {
     let timer: NodeJS.Timeout | undefined;
 
     const tick = async () => {
-      const next = await fetchScanStatus(scanId);
-      if (!active) return;
-      setStatus(next);
-      if (next.status === 'completed') {
-        const r = await fetchScanReport(scanId);
-        if (active) setReport(r);
-        return;
-      }
-      if (next.status !== 'failed' && next.status !== 'cancelled') {
-        timer = setTimeout(() => { void tick(); }, 2500);
+      try {
+        const next = await fetchScanStatus(scanId);
+        if (!active) return;
+        setStatus(next);
+        setError(null);
+        if (next.status === 'completed') {
+          const r = await fetchScanReport(scanId);
+          if (active) setReport(r);
+          return;
+        }
+        if (next.status !== 'failed' && next.status !== 'cancelled') {
+          timer = setTimeout(() => { void tick(); }, 2500);
+        }
+      } catch (requestError) {
+        if (!active) return;
+        setError(requestError instanceof Error ? requestError.message : 'Unable to refresh scan status.');
+        timer = setTimeout(() => { void tick(); }, 5000);
       }
     };
 
@@ -39,7 +47,7 @@ function usePollingScan(scanId: string) {
     return () => { active = false; if (timer) clearTimeout(timer); };
   }, [scanId]);
 
-  return { status, report };
+  return { status, report, error };
 }
 
 // ── Phase helper ─────────────────────────────────────────────────────────────
@@ -56,7 +64,7 @@ function getPhase(progress: number): number {
 export default function ScanPage() {
   const router = useRouter();
   const scanId = typeof router.query.id === 'string' ? router.query.id : '';
-  const { status, report } = usePollingScan(scanId);
+  const { status, report, error } = usePollingScan(scanId);
 
   const vendors = useMemo(() => {
     if (!report) return [] as string[];
@@ -80,7 +88,7 @@ export default function ScanPage() {
   if (!report) {
     return (
       <Layout>
-        <LiveScanView scanId={scanId} status={status} projectId={projectId} />
+        <LiveScanView scanId={scanId} status={status} projectId={projectId} error={error} />
       </Layout>
     );
   }
@@ -94,7 +102,7 @@ export default function ScanPage() {
 }
 
 // ── Live scan view ────────────────────────────────────────────────────────────
-function LiveScanView({ scanId, status, projectId }: { scanId: string; status: ScanStatus | null; projectId: string }) {
+function LiveScanView({ scanId, status, projectId, error }: { scanId: string; status: ScanStatus | null; projectId: string; error: string | null }) {
   const [elapsed, setElapsed] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const startRef = useRef<number | null>(null);
@@ -273,6 +281,11 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
           lineHeight: 1.8,
         }}>
           <div style={{ color: C.slate, letterSpacing: 1, fontSize: 10, marginBottom: 8 }}>CURRENT ACTIVITY</div>
+          {error && (
+            <div style={{ color: C.rust, marginBottom: 12 }}>
+              API refresh failed: {error}. Retrying automatically.
+            </div>
+          )}
           <div style={{ marginBottom: 12 }}>
             <span style={{ fontWeight: 600, color: C.amber }}>Phase:</span> {currentPhaseLabel}
           </div>

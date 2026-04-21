@@ -4,9 +4,14 @@ const runningStatus = {
   scanId: 'scan_demo',
   status: 'running',
   progress: 35,
+  progressPrecise: 35,
   pageCount: 4,
   completedScenarios: 5,
   totalScenarios: 16,
+  currentActivity: {
+    phase: 'REPLAY',
+    message: 'Scanning fixture pages',
+  },
 };
 
 const completedStatus = {
@@ -84,6 +89,18 @@ const report = {
       },
     },
   ],
+  privacySignals: {
+    adTrackers: { detected: true, summary: 'Advertising tracker found', count: 1, entities: ['Meta'], evidence: ['artifact_1'] },
+    thirdPartyCookies: { detected: false, summary: 'Third-party cookies not found', count: 0, entities: [], evidence: [] },
+    cookieBlockerEvasion: { detected: false, summary: 'Cookie-blocker evasion not found', count: 0, entities: [], evidence: [] },
+    canvasFingerprinting: { detected: false, summary: 'Canvas fingerprinting not found', count: 0, entities: [], evidence: [] },
+    sessionRecorders: { detected: false, summary: 'Session recorders not found', count: 0, entities: [], evidence: [] },
+    keystrokeCapture: { detected: false, summary: 'Keystroke capture not found', count: 0, entities: [], evidence: [] },
+    facebookPixel: { detected: true, summary: 'Facebook Pixel found', count: 1, entities: ['Meta'], evidence: ['artifact_1'] },
+    tiktokPixel: { detected: false, summary: 'TikTok Pixel not found', count: 0, entities: [], evidence: [] },
+    xPixel: { detected: false, summary: 'X Pixel not found', count: 0, entities: [], evidence: [] },
+    googleAnalyticsRemarketing: { detected: false, summary: 'GA remarketing not found', count: 0, entities: [], evidence: [] },
+  },
   diff: {
     newVendors: ['Meta'],
     newCookies: ['meta_pixel'],
@@ -131,11 +148,11 @@ test('user can start a scan and view the final report', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Project name').fill('Primary Website');
   await page.getByLabel('Root URL').fill('https://example.com');
-  await page.getByRole('button', { name: 'Create project and start scan' }).click();
+  await page.getByRole('button', { name: /START AUDIT/ }).click();
 
   await expect(page).toHaveURL(/\/scans\/scan_demo/);
-  await expect(page.getByText('Audit complete')).toBeVisible();
-  await expect(page.getByText('Technical findings with evidence')).toBeVisible();
+  await expect(page.getByText('Audit report · https://example.com/')).toBeVisible();
+  await expect(page.getByText('Findings (1)')).toBeVisible();
   await expect(page.getByText('Non-essential tracking before consent')).toBeVisible();
-  await expect(page.getByText('Meta')).toBeVisible();
+  await expect(page.getByText(/^Meta$/).first()).toBeVisible();
 });

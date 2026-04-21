@@ -124,7 +124,7 @@ export default function HomePage() {
                   onBlur={(e) => { e.target.style.borderColor = C.hairlineStrong; e.target.style.boxShadow = 'none'; }}
                 />
                 <span style={{ fontFamily: F.mono, fontSize: 10, color: C.slate60 }}>
-                  Crawler honors robots.txt · max depth 3 · timeout 90s per page
+                  Same-host discovery · max 15 pages · timeout 90s per page
                 </span>
               </div>
 
@@ -248,8 +248,8 @@ export default function HomePage() {
             ))}
 
             <div style={{ marginTop: 20, fontFamily: F.mono, fontSize: 11, color: C.slate, lineHeight: 1.6 }}>
-              <span style={{ color: C.rust, fontWeight: 700 }}>✶</span> Output is legal-grade.
-              Every finding carries a replay trace, HAR sample and DOM snapshot — sufficient for inclusion in a DPA filing.
+              <span style={{ color: C.rust, fontWeight: 700 }}>✶</span> Evidence is heuristic.
+              Findings include runtime evidence and remediation notes for expert review.
             </div>
           </aside>
         </div>
