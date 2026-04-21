@@ -59,14 +59,21 @@ export async function processScanJob(jobData: ScanJob) {
     return flag === '1';
   }
 
+  async function throwIfCancelled(): Promise<void> {
+    if (await isCancelled()) {
+      throw new ScanCancelledError(jobData.id);
+    }
+  }
+
   try {
+    await throwIfCancelled();
     const outputPath = `${config.STORAGE_PATH}/${jobData.id}`;
     const browserScan = await runBrowserScan({
       rootUrl: jobData.rootUrl,
       config: jobData.config,
       outputPath,
       onDiscovery: async (pages, scenariosPerPage) => {
-        if (await isCancelled()) throw new ScanCancelledError(jobData.id);
+        await throwIfCancelled();
         logger.info({ scanId: jobData.id, pageCount: pages.length, scenariosPerPage }, 'Pages discovered — creating stubs');
         await updateScanActivity(jobData.id, {
           phase: 'CRAWL',
@@ -75,7 +82,7 @@ export async function processScanJob(jobData: ScanJob) {
         await createPageStubs(jobData.id, pages, scenariosPerPage);
       },
       onPageComplete: async (page, completedPages, totalPages) => {
-        if (await isCancelled()) throw new ScanCancelledError(jobData.id);
+        await throwIfCancelled();
         logger.info({ scanId: jobData.id, url: page.url, completedPages, totalPages }, 'Page complete — persisting incrementally');
         const pageProgress = Math.round((completedPages / totalPages) * 100);
         await updateScanActivity(jobData.id, {
@@ -88,6 +95,7 @@ export async function processScanJob(jobData: ScanJob) {
       },
     });
 
+    await throwIfCancelled();
     await updateScanActivity(jobData.id, {
       phase: 'EVIDENCE',
       message: 'Processing privacy policy and collecting evidence',
@@ -97,6 +105,7 @@ export async function processScanJob(jobData: ScanJob) {
     const policyPages = [];
 
     for (const link of policyLinks) {
+      await throwIfCancelled();
       try {
         const html = await fetchPageHtml(link.url);
         policyPages.push({
@@ -109,6 +118,7 @@ export async function processScanJob(jobData: ScanJob) {
       }
     }
 
+    await throwIfCancelled();
     await updateScanActivity(jobData.id, {
       phase: 'RULES',
       message: 'Evaluating compliance rules',
@@ -157,6 +167,7 @@ export async function processScanJob(jobData: ScanJob) {
     });
     const scores = calculateScores(findings);
 
+    await throwIfCancelled();
     await updateScanActivity(jobData.id, {
       phase: 'SCORE',
       message: `Overall compliance score: ${Math.round(scores.overall)}%`,
@@ -178,6 +189,7 @@ export async function processScanJob(jobData: ScanJob) {
       message: 'Generating final report',
     });
 
+    await throwIfCancelled();
     await persistCompletedScan(report, baselineRow?.id ?? null, true);
     return { scanId: jobData.id };
   } catch (error) {

@@ -64,6 +64,10 @@ function normalizeUrl(input: string): string {
     throw new Error('URL cannot be empty');
   }
 
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(raw) && !/^https?:\/\//i.test(raw)) {
+    throw new Error('Only HTTP and HTTPS URLs are supported');
+  }
+
   const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   const url = new URL(candidate);
 
@@ -142,7 +146,13 @@ export async function discoverPages(rootUrl: string, config: ScanConfig): Promis
       continue;
     }
 
-    const candidateUrl = normalizeUrl(new URL(item.href, rootUrl).toString());
+    let candidateUrl: string;
+    try {
+      candidateUrl = normalizeUrl(new URL(item.href, rootUrl).toString());
+    } catch {
+      continue;
+    }
+
     if (!sameHostname(rootUrl, candidateUrl, config.allowedSubdomains)) {
       continue;
     }

@@ -6,6 +6,11 @@ const urlSchema = z.string().trim().min(1);
 
 export function normalizeUrl(input: string): string {
   const raw = urlSchema.parse(input);
+
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(raw) && !/^https?:\/\//i.test(raw)) {
+    throw new Error('Only HTTP and HTTPS URLs are supported');
+  }
+
   const candidate = raw.match(/^https?:\/\//i) ? raw : `https://${raw}`;
   const url = new URL(candidate);
 

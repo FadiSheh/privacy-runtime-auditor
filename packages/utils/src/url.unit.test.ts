@@ -18,6 +18,10 @@ describe('normalizeUrl', () => {
   it('removes default ports and fragments', () => {
     expect(normalizeUrl('https://example.com:443/path/#fragment')).toBe('https://example.com/path');
   });
+
+  it('rejects unsupported URL schemes', () => {
+    expect(() => normalizeUrl('ftp://example.com')).toThrow(/HTTP and HTTPS/);
+  });
 });
 
 describe('assertSafeScanTarget', () => {

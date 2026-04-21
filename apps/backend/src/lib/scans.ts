@@ -15,7 +15,7 @@ import { createId } from '@pra/utils';
 
 import { getDatabase } from './database';
 import { getProjectById } from './projects';
-import { getScanQueue } from './queue';
+import { getScanQueue, setScanCancellationFlag } from './queue';
 
 export async function createScan(projectId: string) {
   const { db } = await getDatabase();
@@ -45,11 +45,23 @@ export async function createScan(projectId: string) {
     config: scanConfigSchema.parse(project.configJson),
   };
 
-  await getScanQueue().add(scan.id, payload, {
-    jobId: scan.id,
-    removeOnComplete: 50,
-    removeOnFail: 50,
-  });
+  try {
+    await getScanQueue().add(scan.id, payload, {
+      jobId: scan.id,
+      removeOnComplete: 50,
+      removeOnFail: 50,
+    });
+  } catch (error) {
+    await db.update(scans)
+      .set({
+        status: 'failed',
+        finishedAt: new Date(),
+        riskLevel: 'high',
+      })
+      .where(eq(scans.id, scan.id));
+
+    throw new Error('Scan queue unavailable', { cause: error });
+  }
 
   return scan;
 }
@@ -159,11 +171,7 @@ export async function cancelScan(scanId: string) {
     await job.remove();
   }
 
-  // Publish a cancellation signal so the worker can abort a running job
-  const { getRedisConnection } = await import('./queue.js');
-  const redis = getRedisConnection();
-  await redis.set(`pra:cancel:${scanId}`, '1', 'EX', 300);
-  await redis.quit();
+  await setScanCancellationFlag(scanId);
 
   // Mark the scan as cancelled in the DB
   await db.update(scans)

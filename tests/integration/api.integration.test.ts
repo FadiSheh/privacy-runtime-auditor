@@ -67,6 +67,29 @@ describe('backend api integration', () => {
     expect(response.json<{ rootUrl: string }>().rootUrl).toBe('https://example.com/privacy');
   });
 
+  it('returns client errors for invalid project input and unknown scans', async () => {
+    const invalidProjectResponse = await server.inject({
+      method: 'POST',
+      url: '/projects',
+      payload: {
+        name: 'Invalid',
+        rootUrl: 'ftp://bad',
+      },
+    });
+
+    expect(invalidProjectResponse.statusCode).toBe(400);
+    expect(invalidProjectResponse.json<{ message: string }>().message).toBe('Invalid request');
+
+    const scanResponse = await server.inject({
+      method: 'POST',
+      url: '/projects/project_missing/scans',
+      payload: {},
+    });
+
+    expect(scanResponse.statusCode).toBe(404);
+    expect(scanResponse.json<{ message: string }>().message).toBe('Project not found');
+  });
+
   it('lists privacy-dependent trackers for a scan', async () => {
     const projectResponse = await server.inject({
       method: 'POST',

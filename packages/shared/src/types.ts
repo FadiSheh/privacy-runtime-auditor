@@ -17,7 +17,7 @@ export const vendorCategorySchema = z.enum([
 ]);
 export type VendorCategory = z.infer<typeof vendorCategorySchema>;
 
-export const scanStatusSchema = z.enum(['queued', 'running', 'completed', 'failed']);
+export const scanStatusSchema = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']);
 export type ScanStatus = z.infer<typeof scanStatusSchema>;
 
 export const evidenceTypeSchema = z.enum([

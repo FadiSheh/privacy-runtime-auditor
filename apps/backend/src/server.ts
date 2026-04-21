@@ -8,7 +8,6 @@ import { migrations } from '@pra/db';
 import { renderPdfReport } from '@pra/report-generator';
 import { createLogger, normalizeUrl } from '@pra/utils';
 
-import { getConfig } from './config';
 import { pingDatabase } from './lib/database';
 import { listProjects, createProject, getProjectById, updateProject, deleteProject } from './lib/projects';
 import { buildCompletedScanReport, buildJsonReport, buildPrivacyDependentTrackerList } from './lib/reports';
@@ -55,6 +54,39 @@ export async function buildServer() {
 
   await app.register(cors, { origin: true });
   await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof z.ZodError) {
+      reply.code(400).send({
+        message: 'Invalid request',
+        issues: error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : 'Unexpected server error';
+
+    if (message === 'Project not found' || message === 'Scan not found') {
+      reply.code(404).send({ message });
+      return;
+    }
+
+    if (message === 'No completed scan available to use as baseline') {
+      reply.code(409).send({ message });
+      return;
+    }
+
+    if (message === 'Scan queue unavailable') {
+      request.log.error({ error }, 'Unable to enqueue scan job');
+      reply.code(503).send({ message: 'Scan queue unavailable' });
+      return;
+    }
+
+    reply.send(error instanceof Error ? error : new Error(message));
+  });
 
   app.get('/health', async () => {
     await pingDatabase();

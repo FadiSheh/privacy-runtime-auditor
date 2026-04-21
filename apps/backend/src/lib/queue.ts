@@ -10,11 +10,26 @@ export const scanQueueName = 'pra-scan-queue';
 type ScanQueueLike = Pick<Queue<ScanJob>, 'add' | 'getJob' | 'remove'>;
 
 let queue: ScanQueueLike | null = null;
+const memoryCancellationFlags = new Map<string, string>();
 
 export function getRedisConnection() {
   return new IORedis(getConfig().REDIS_URL, {
     maxRetriesPerRequest: null,
   });
+}
+
+export async function setScanCancellationFlag(scanId: string): Promise<void> {
+  if (getConfig().REDIS_URL === 'memory') {
+    memoryCancellationFlags.set(`pra:cancel:${scanId}`, '1');
+    return;
+  }
+
+  const redis = getRedisConnection();
+  try {
+    await redis.set(`pra:cancel:${scanId}`, '1', 'EX', 300);
+  } finally {
+    await redis.quit();
+  }
 }
 
 export function getScanQueue(): ScanQueueLike {
