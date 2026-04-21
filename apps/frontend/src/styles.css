@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -16,7 +16,14 @@ body {
   background: #F0EAD6;
   min-height: 100%;
   color: #1A1C22;
-  font-family: 'Instrument Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 @keyframes pra-pulse {
@@ -49,6 +56,6 @@ input:focus-visible {
 
 input::placeholder {
   color: #A8AEB8;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: inherit;
   font-size: 13px;
 }

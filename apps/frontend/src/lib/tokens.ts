@@ -23,9 +23,9 @@ export const C = {
 } as const;
 
 export const F = {
-  body: "'Instrument Sans', sans-serif",
-  mono: "'JetBrains Mono', monospace",
-  serif: "'Instrument Serif', serif",
+  body: "'Inter', sans-serif",
+  mono: "'Inter', sans-serif",
+  serif: "'Inter', sans-serif",
 } as const;
 
 export function scoreColor(n: number): string {

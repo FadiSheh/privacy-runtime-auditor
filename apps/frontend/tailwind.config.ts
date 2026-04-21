@@ -28,9 +28,9 @@ const config: Config = {
         'hairline-strong': '#B8AE85',
       },
       fontFamily: {
-        sans: ["'Instrument Sans'", 'sans-serif'],
-        serif: ["'Instrument Serif'", 'serif'],
-        mono: ["'JetBrains Mono'", 'monospace'],
+        sans: ["'Inter'", 'sans-serif'],
+        serif: ["'Inter'", 'sans-serif'],
+        mono: ["'Inter'", 'sans-serif'],
       },
     },
   },
