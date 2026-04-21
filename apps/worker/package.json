@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsup src/main.ts --format esm,cjs --dts false --clean",
-    "start": "node dist/main.js",
+    "build": "tsup src/main.ts --format esm,cjs --clean",
+    "start": "node dist/main.mjs",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
