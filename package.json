@@ -2,6 +2,7 @@
   "name": "privacy-runtime-auditor",
   "version": "0.1.0",
   "description": "Runtime privacy compliance auditing platform",
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "workspaces": [
     "apps/frontend",

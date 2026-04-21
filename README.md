@@ -408,4 +408,4 @@ For the complete specification, see [privacy-runtime-auditor-spec-v2-ui.md](./pr
 
 ## License
 
-TBD
+AGPL-3.0-or-later. See [LICENSE](./LICENSE).
