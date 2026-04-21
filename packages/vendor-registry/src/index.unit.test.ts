@@ -86,6 +86,14 @@ describe('classifyVendorByHost', () => {
       vendorName: 'Hotjar',
       category: 'analytics',
     });
+    expect(classifyVendorByHost('cdn.mouseflow.com')).toMatchObject({
+      vendorName: 'Mouseflow',
+      category: 'analytics',
+    });
+    expect(classifyVendorByHost('t.contentsquare.net')).toMatchObject({
+      vendorName: 'Contentsquare',
+      category: 'analytics',
+    });
   });
 
   it('returns unknown for unmapped domains', () => {

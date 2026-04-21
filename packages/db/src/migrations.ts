@@ -147,6 +147,12 @@ export const migrations = [
       CREATE INDEX IF NOT EXISTS idx_artifacts_scan ON artifacts (scan_id);
     `,
   },
+  {
+    id: '0002_add_scan_activity_tracking',
+    sql: `
+      ALTER TABLE scans ADD COLUMN IF NOT EXISTS current_activity_json JSONB;
+    `,
+  },
 ] as const;
 export async function runMigrations(executor: { execute: (query: ReturnType<typeof sql.raw>) => Promise<unknown> }) {
   for (const migration of migrations) {

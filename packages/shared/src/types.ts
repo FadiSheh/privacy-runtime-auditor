@@ -10,6 +10,7 @@ export const vendorCategorySchema = z.enum([
   'essential',
   'analytics',
   'advertising',
+  'marketing',
   'social',
   'functional',
   'unknown',
@@ -40,6 +41,8 @@ export const artifactTypeSchema = z.enum([
   'indexed-db',
   'script',
   'iframe',
+  'browser-api',
+  'event-listener',
 ]);
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 
@@ -215,6 +218,44 @@ export const runtimeArtifactSchema = z.object({
 });
 export type RuntimeArtifact = z.infer<typeof runtimeArtifactSchema>;
 
+export const privacyDependentTrackerSchema = z.object({
+  pageUrl: z.string().url(),
+  pageKind: pageKindSchema,
+  trackerKey: z.string(),
+  trackerLabel: z.string(),
+  vendorName: z.string().nullable(),
+  domain: z.string().nullable(),
+  category: vendorCategorySchema,
+  activeScenarios: z.array(scenarioTypeSchema),
+  inactiveScenarios: z.array(scenarioTypeSchema),
+  artifactTypes: z.array(artifactTypeSchema),
+  evidenceArtifactIds: z.array(z.string()),
+});
+export type PrivacyDependentTracker = z.infer<typeof privacyDependentTrackerSchema>;
+
+export const privacySignalCheckSchema = z.object({
+  detected: z.boolean(),
+  summary: z.string(),
+  count: z.number().int().nonnegative().default(0),
+  entities: z.array(z.string()).default([]),
+  evidence: z.array(z.string()).default([]),
+});
+export type PrivacySignalCheck = z.infer<typeof privacySignalCheckSchema>;
+
+export const privacySignalsSummarySchema = z.object({
+  adTrackers: privacySignalCheckSchema,
+  thirdPartyCookies: privacySignalCheckSchema,
+  cookieBlockerEvasion: privacySignalCheckSchema,
+  canvasFingerprinting: privacySignalCheckSchema,
+  sessionRecorders: privacySignalCheckSchema,
+  keystrokeCapture: privacySignalCheckSchema,
+  facebookPixel: privacySignalCheckSchema,
+  tiktokPixel: privacySignalCheckSchema,
+  xPixel: privacySignalCheckSchema,
+  googleAnalyticsRemarketing: privacySignalCheckSchema,
+});
+export type PrivacySignalsSummary = z.infer<typeof privacySignalsSummarySchema>;
+
 export const scenarioScanResultSchema = z.object({
   scenarioType: scenarioTypeSchema,
   status: z.enum(['completed', 'failed', 'skipped']),
@@ -263,6 +304,8 @@ export const completedScanSchema = z.object({
   scores: scoreBreakdownSchema,
   riskLevel: riskLevelSchema,
   diff: scanDiffSummarySchema.nullable(),
+  privacyDependentTrackers: z.array(privacyDependentTrackerSchema).default([]),
+  privacySignals: privacySignalsSummarySchema,
   limitations: z.array(z.string()),
 });
 export type CompletedScan = z.infer<typeof completedScanSchema>;

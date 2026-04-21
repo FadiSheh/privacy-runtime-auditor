@@ -37,11 +37,10 @@ export default function HomePage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) return setError('Project name is required.');
-    if (!/^https?:\/\//.test(rootUrl)) return setError('Root URL must start with http:// or https://');
     setLoading(true);
     setError(null);
     try {
-      const project = await createProject({ name, rootUrl });
+      const project = await createProject({ name, rootUrl: rootUrl.trim() });
       const scan = await startScan(project.id);
       await router.push(`/scans/${scan.id}`);
     } catch (err) {

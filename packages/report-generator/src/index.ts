@@ -29,6 +29,9 @@ export async function renderPdfReport(report: CompletedScan): Promise<RenderedPd
     document.text(`Scan ID: ${report.scanId}`);
     document.text(`Overall score: ${report.scores.overall}`);
     document.text(`Risk level: ${report.riskLevel}`);
+    document.text(`Privacy-dependent trackers: ${report.privacyDependentTrackers.length}`);
+    document.text(`Ad trackers: ${report.privacySignals.adTrackers.count}`);
+    document.text(`Third-party cookies: ${report.privacySignals.thirdPartyCookies.count}`);
     document.moveDown();
     document.fontSize(16).text('Top Findings');
     document.moveDown(0.5);
@@ -38,6 +41,42 @@ export async function renderPdfReport(report: CompletedScan): Promise<RenderedPd
       document.fontSize(10).text(finding.summary);
       document.moveDown(0.5);
     }
+
+    document.addPage();
+    document.fontSize(16).text('Privacy-Dependent Trackers');
+    document.moveDown(0.5);
+
+    if (report.privacyDependentTrackers.length === 0) {
+      document.fontSize(10).text('No tracker changed behavior across the completed consent scenarios.');
+    } else {
+      for (const tracker of report.privacyDependentTrackers.slice(0, 10)) {
+        document.fontSize(12).text(`${tracker.trackerLabel} · ${tracker.pageUrl}`);
+        document
+          .fontSize(10)
+          .text(`Active: ${tracker.activeScenarios.join(', ')} · Inactive: ${tracker.inactiveScenarios.join(', ')}`);
+        document.moveDown(0.5);
+      }
+    }
+
+    document.addPage();
+    document.fontSize(16).text('Privacy Signals');
+    document.moveDown(0.5);
+
+    [
+      ['Ad trackers', report.privacySignals.adTrackers.summary],
+      ['Third-party cookies', report.privacySignals.thirdPartyCookies.summary],
+      ['Cookie blocker evasion', report.privacySignals.cookieBlockerEvasion.summary],
+      ['Canvas fingerprinting', report.privacySignals.canvasFingerprinting.summary],
+      ['Session recorders', report.privacySignals.sessionRecorders.summary],
+      ['Keystroke capture', report.privacySignals.keystrokeCapture.summary],
+      ['Facebook Pixel', report.privacySignals.facebookPixel.summary],
+      ['TikTok Pixel', report.privacySignals.tiktokPixel.summary],
+      ['X Pixel', report.privacySignals.xPixel.summary],
+      ['GA remarketing', report.privacySignals.googleAnalyticsRemarketing.summary],
+    ].forEach(([label, value]) => {
+      document.fontSize(12).text(`${label}: ${value}`);
+      document.moveDown(0.35);
+    });
 
     document.addPage();
     document.fontSize(16).text('Scanned Pages');

@@ -104,7 +104,7 @@ export default function DocsPage() {
               <div style={{ fontFamily: F.mono, fontSize: 10, color: C.slate, letterSpacing: 1, marginBottom: 12, fontWeight: 600 }}>
                 WHAT THE SYSTEM ACTUALLY DOES
               </div>
-              {[
+              {([
                 ['Project', 'Stores a target root URL plus the default scan configuration used for new scans.'],
                 ['Scan', 'Represents one queued or executed audit run for a single project.'],
                 ['Discovery', 'Finds pages from links on the landing page only, limited by maxPages and allowedSubdomains.'],
@@ -113,7 +113,7 @@ export default function DocsPage() {
                 ['Policies', 'Attempts to discover and parse up to two legal pages, typically privacy and cookie pages.'],
                 ['Rules', 'Generates findings R001-R012 based on runtime behavior, policy mismatch, and baseline regressions.'],
                 ['Reports', 'Exposes structured results through report.json and report.pdf endpoints.'],
-              ].map(([k, v]) => <KV key={k} k={k} v={v} />)}
+              ] as Array<[string, string]>).map(([k, v]) => <KV key={k} k={k} v={v} />)}
             </div>
             <Callout title="EXAMPLE: ONE COMPLETE RUN">
               You create a project for https://shop.example.com, start a scan, PRA discovers the homepage plus product, contact, and policy links,

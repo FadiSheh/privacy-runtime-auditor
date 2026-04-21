@@ -3,15 +3,21 @@ import IORedis from 'ioredis';
 
 import { fetchPageHtml, runBrowserScan } from '@pra/browser-runner';
 import { extractPolicySummary, discoverPolicyLinks } from '@pra/policy-parser';
-import { evaluateRules, calculateScores, riskLevelFromScore } from '@pra/rules-engine';
+import { evaluateRules, calculateScores, detectPrivacyDependentTrackers, riskLevelFromScore, summarizePrivacySignals } from '@pra/rules-engine';
 import type { ScanJob } from '@pra/shared';
 import { createLogger } from '@pra/utils';
 
 import { getWorkerConfig } from './lib/config';
-import { buildDiffSummary, loadCompletedScan, loadLatestCompletedScan, markScanFailed, markScanRunning, markScanCancelled, persistCompletedScan, persistPageIncremental, createPageStubs, toCompletedScanFromStored } from './lib/persist';
+import { buildDiffSummary, loadCompletedScan, loadLatestCompletedScan, markScanFailed, markScanRunning, markScanCancelled, persistCompletedScan, persistPageIncremental, createPageStubs, toCompletedScanFromStored, updateScanActivity } from './lib/persist';
 
 const logger = createLogger('pra-worker');
 const scanQueueName = 'pra-scan-queue';
+const memoryCancellationFlags = new Map<string, string>();
+
+interface CancellationStore {
+  get(key: string): Promise<string | null>;
+  quit(): Promise<void>;
+}
 
 class ScanCancelledError extends Error {
   constructor(scanId: string) {
@@ -20,15 +26,36 @@ class ScanCancelledError extends Error {
   }
 }
 
+function createCancellationStore(redisUrl: string): CancellationStore {
+  if (redisUrl === 'memory') {
+    return {
+      get: async (key) => memoryCancellationFlags.get(key) ?? null,
+      quit: async () => undefined,
+    };
+  }
+
+  const redis = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+  return {
+    get: (key) => redis.get(key),
+    quit: async () => {
+      await redis.quit();
+    },
+  };
+}
+
 export async function processScanJob(jobData: ScanJob) {
   logger.info({ scanId: jobData.id }, 'Received scan job');
   await markScanRunning(jobData.id);
+  await updateScanActivity(jobData.id, {
+    phase: 'CRAWL',
+    message: 'Starting page discovery and scanning',
+  });
 
   const config = getWorkerConfig();
-  const redis = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const cancellationStore = createCancellationStore(config.REDIS_URL);
 
   async function isCancelled(): Promise<boolean> {
-    const flag = await redis.get(`pra:cancel:${jobData.id}`);
+    const flag = await cancellationStore.get(`pra:cancel:${jobData.id}`);
     return flag === '1';
   }
 
@@ -41,13 +68,29 @@ export async function processScanJob(jobData: ScanJob) {
       onDiscovery: async (pages, scenariosPerPage) => {
         if (await isCancelled()) throw new ScanCancelledError(jobData.id);
         logger.info({ scanId: jobData.id, pageCount: pages.length, scenariosPerPage }, 'Pages discovered — creating stubs');
+        await updateScanActivity(jobData.id, {
+          phase: 'CRAWL',
+          message: `Discovered ${pages.length} pages, preparing ${pages.length * scenariosPerPage} scenarios`,
+        });
         await createPageStubs(jobData.id, pages, scenariosPerPage);
       },
       onPageComplete: async (page, completedPages, totalPages) => {
         if (await isCancelled()) throw new ScanCancelledError(jobData.id);
         logger.info({ scanId: jobData.id, url: page.url, completedPages, totalPages }, 'Page complete — persisting incrementally');
+        const pageProgress = Math.round((completedPages / totalPages) * 100);
+        await updateScanActivity(jobData.id, {
+          phase: 'REPLAY',
+          currentPage: page.url,
+          currentUrl: page.url,
+          message: `Scanning page ${completedPages} of ${totalPages} (${pageProgress}%) - ${page.url}`,
+        });
         await persistPageIncremental(jobData.id, page);
       },
+    });
+
+    await updateScanActivity(jobData.id, {
+      phase: 'EVIDENCE',
+      message: 'Processing privacy policy and collecting evidence',
     });
 
     const policyLinks = discoverPolicyLinks(browserScan.homepageHtml, jobData.rootUrl).slice(0, 2);
@@ -66,8 +109,15 @@ export async function processScanJob(jobData: ScanJob) {
       }
     }
 
+    await updateScanActivity(jobData.id, {
+      phase: 'RULES',
+      message: 'Evaluating compliance rules',
+    });
+
     const baselineRow = await loadLatestCompletedScan(jobData.projectId, jobData.id);
     const startedAt = new Date().toISOString();
+    const privacyDependentTrackers = detectPrivacyDependentTrackers(browserScan.pages);
+    const privacySignals = summarizePrivacySignals(browserScan.pages);
     const provisional = toCompletedScanFromStored({
       scanId: jobData.id,
       projectId: jobData.projectId,
@@ -85,6 +135,8 @@ export async function processScanJob(jobData: ScanJob) {
       },
       riskLevel: 'low',
       diff: null,
+      privacyDependentTrackers,
+      privacySignals,
       startedAt,
       finishedAt: new Date().toISOString(),
     });
@@ -104,14 +156,27 @@ export async function processScanJob(jobData: ScanJob) {
       diff,
     });
     const scores = calculateScores(findings);
+
+    await updateScanActivity(jobData.id, {
+      phase: 'SCORE',
+      message: `Overall compliance score: ${Math.round(scores.overall)}%`,
+    });
+
     const report = {
       ...provisional,
       findings,
       scores,
       riskLevel: riskLevelFromScore(scores.overall),
       diff,
+      privacyDependentTrackers,
+      privacySignals,
       finishedAt: new Date().toISOString(),
     };
+
+    await updateScanActivity(jobData.id, {
+      phase: 'REPORT',
+      message: 'Generating final report',
+    });
 
     await persistCompletedScan(report, baselineRow?.id ?? null, true);
     return { scanId: jobData.id };
@@ -124,7 +189,7 @@ export async function processScanJob(jobData: ScanJob) {
     }
     throw error;
   } finally {
-    await redis.quit();
+    await cancellationStore.quit();
   }
 }
 

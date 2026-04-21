@@ -39,6 +39,7 @@ export const scans = pgTable('scans', {
   overallScore: integer('overall_score'),
   riskLevel: text('risk_level'),
   configJson: jsonb('config_json').notNull(),
+  currentActivityJson: jsonb('current_activity_json'),
 });
 
 export const scanPages = pgTable('scan_pages', {

@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { observations, projects, scanPages, scans as scansTable, scenarios } from '@pra/db';
 import type { CompletedScan, Finding, PageKind, PageScanResult, ScenarioScanResult, ScenarioType } from '@pra/shared';
 
-import { calculateScores, riskLevelFromScore } from '@pra/rules-engine';
+import { calculateScores, detectPrivacyDependentTrackers, riskLevelFromScore, summarizePrivacySignals } from '@pra/rules-engine';
 
 import { getDatabase } from './database';
 import { getScanArtifacts, getScanDiff, getScanFindings, getScanPolicies } from './scans';
@@ -130,10 +130,17 @@ export async function buildCompletedScanReport(scanId: string): Promise<Complete
     scores,
     riskLevel: scan.overallScore ? riskLevelFromScore(scan.overallScore) : riskLevelFromScore(scores.overall),
     diff: diffRow?.diffJson as CompletedScan['diff'],
+    privacyDependentTrackers: detectPrivacyDependentTrackers(pages),
+    privacySignals: summarizePrivacySignals(pages),
     limitations: [],
   };
 }
 
 export async function buildJsonReport(scanId: string) {
   return buildCompletedScanReport(scanId);
+}
+
+export async function buildPrivacyDependentTrackerList(scanId: string) {
+  const report = await buildCompletedScanReport(scanId);
+  return report.privacyDependentTrackers;
 }

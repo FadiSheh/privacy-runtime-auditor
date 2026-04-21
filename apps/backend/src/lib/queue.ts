@@ -23,17 +23,19 @@ export function getScanQueue(): ScanQueueLike {
   }
 
   if (getConfig().REDIS_URL === 'memory') {
-    queue = {
+    const memoryQueue: ScanQueueLike = {
       add: async (_name, data) => ({ id: data.id } as Awaited<ReturnType<Queue<ScanJob>['add']>>),
-      getJob: async () => null,
+      getJob: async () => undefined,
       remove: async () => 0,
     };
-    return queue;
+    queue = memoryQueue;
+    return memoryQueue;
   }
 
-  queue = new Queue<ScanJob>(scanQueueName, {
+  const createdQueue = new Queue<ScanJob>(scanQueueName, {
     connection: getRedisConnection(),
   });
+  queue = createdQueue;
 
-  return queue;
+  return createdQueue;
 }

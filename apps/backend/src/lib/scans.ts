@@ -106,22 +106,39 @@ export async function getScanStatus(scanId: string) {
   const completedScenarios = scenarioRows.filter((row) => row.status === 'completed').length;
   const totalScenarios = scenarioRows.length;
 
+  // Improved progress calculation with 4 decimal places for precision
+  const baseProgress =
+    totalScenarios > 0
+      ? (completedScenarios / totalScenarios) * 100
+      : scan.status === 'completed'
+        ? 100
+        : 0;
+
+  // Parse current activity if available
+  const currentActivity = scan.currentActivityJson as {
+    phase?: string;
+    currentPage?: string;
+    currentUrl?: string;
+    message?: string;
+  } | null;
+
   return {
     scanId,
     status: scan.status,
     startedAt: scan.startedAt,
     finishedAt: scan.finishedAt,
-    progress:
-      totalScenarios > 0
-        ? Math.round((completedScenarios / totalScenarios) * 100)
-        : scan.status === 'completed'
-          ? 100
-          : 0,
+    progress: Math.round(baseProgress * 100) / 100, // Keep 2 decimal places for display
+    progressPrecise: baseProgress, // Full precision for calculations
     pageCount: pages.length,
     completedScenarios,
     totalScenarios,
+    currentActivity: currentActivity || {
+      phase: 'waiting',
+      message: scan.status === 'queued' ? 'Queued for processing' : 'Initializing',
+    },
   };
 }
+
 
 export async function cancelScan(scanId: string) {
   const scan = await getScan(scanId);
@@ -144,7 +161,7 @@ export async function cancelScan(scanId: string) {
   }
 
   // Publish a cancellation signal so the worker can abort a running job
-  const { getRedisConnection } = await import('./queue');
+  const { getRedisConnection } = await import('./queue.js');
   const redis = getRedisConnection();
   await redis.set(`pra:cancel:${scanId}`, '1', 'EX', 300);
   await redis.quit();

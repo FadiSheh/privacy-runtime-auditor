@@ -34,11 +34,18 @@ export interface ScanStatus {
   scanId: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
+  progressPrecise: number;
   pageCount: number;
   completedScenarios: number;
   totalScenarios: number;
   startedAt?: string;
   finishedAt?: string;
+  currentActivity?: {
+    phase?: string;
+    currentPage?: string;
+    currentUrl?: string;
+    message?: string;
+  };
 }
 
 export interface FindingSummary {
@@ -107,6 +114,18 @@ export interface ScanReport {
     newFailures: string[];
     resolvedFindings: string[];
   } | null;
+  privacySignals: {
+    adTrackers: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    thirdPartyCookies: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    cookieBlockerEvasion: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    canvasFingerprinting: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    sessionRecorders: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    keystrokeCapture: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    facebookPixel: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    tiktokPixel: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    xPixel: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+    googleAnalyticsRemarketing: { detected: boolean; summary: string; count: number; entities: string[]; evidence: string[] };
+  };
   limitations: string[];
 }
 

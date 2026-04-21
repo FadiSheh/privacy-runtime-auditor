@@ -12,6 +12,7 @@ import {
   scenarios,
 } from '@pra/db';
 import type { ArtifactType, CompletedScan, Finding, PageKind, PageScanResult, PolicyPage, RuntimeArtifact, ScanDiffSummary, ScenarioScanResult, ScenarioType, VendorCategory } from '@pra/shared';
+import { detectPrivacyDependentTrackers, summarizePrivacySignals } from '@pra/rules-engine';
 import { createId } from '@pra/utils';
 
 import { getDatabase } from './database';
@@ -19,6 +20,19 @@ import { getDatabase } from './database';
 export async function markScanRunning(scanId: string) {
   const { db } = await getDatabase();
   await db.update(scans).set({ status: 'running', startedAt: new Date() }).where(eq(scans.id, scanId));
+}
+
+export async function updateScanActivity(
+  scanId: string,
+  activity: {
+    phase?: string;
+    currentPage?: string;
+    currentUrl?: string;
+    message?: string;
+  },
+) {
+  const { db } = await getDatabase();
+  await db.update(scans).set({ currentActivityJson: activity }).where(eq(scans.id, scanId));
 }
 
 export async function persistCompletedScan(scan: CompletedScan, baselineScanId?: string | null, pagesAlreadyPersisted = false) {
@@ -401,6 +415,8 @@ export async function loadCompletedScan(scanId: string): Promise<CompletedScan |
     },
     riskLevel: (scan.riskLevel as CompletedScan['riskLevel']) ?? 'low',
     diff: (diffRows[0]?.diffJson as ScanDiffSummary | undefined) ?? null,
+    privacyDependentTrackers: detectPrivacyDependentTrackers(pages),
+    privacySignals: summarizePrivacySignals(pages),
     limitations: [],
   };
 }
@@ -435,6 +451,8 @@ export function toCompletedScanFromStored(params: {
   scores: CompletedScan['scores'];
   riskLevel: CompletedScan['riskLevel'];
   diff: ScanDiffSummary | null;
+  privacyDependentTrackers?: CompletedScan['privacyDependentTrackers'];
+  privacySignals?: CompletedScan['privacySignals'];
   startedAt: string;
   finishedAt: string;
 }): CompletedScan {
@@ -448,6 +466,8 @@ export function toCompletedScanFromStored(params: {
     scores: params.scores,
     riskLevel: params.riskLevel,
     diff: params.diff,
+    privacyDependentTrackers: params.privacyDependentTrackers ?? detectPrivacyDependentTrackers(params.pages),
+    privacySignals: params.privacySignals ?? summarizePrivacySignals(params.pages),
     limitations: [],
     startedAt: params.startedAt,
     finishedAt: params.finishedAt,

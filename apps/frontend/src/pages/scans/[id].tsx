@@ -126,6 +126,7 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
   const progress = status?.progress ?? 0;
+  const currentPhaseLabel = status?.currentActivity?.phase || 'WAITING';
   const activePhase = getPhase(progress);
 
   const phases = ['CRAWL', 'REPLAY', 'EVIDENCE', 'RULES', 'SCORE', 'REPORT'] as const;
@@ -165,7 +166,7 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
             letterSpacing: -0.8,
             lineHeight: 1.1,
           }}>
-            Scan {scanId.slice(0, 12)} — {status ? `${progress}% complete` : 'waiting for worker'}
+            Scan {scanId.slice(0, 12)} — {status ? `${progress.toFixed(1)}% complete` : 'waiting for worker'}
           </h1>
 
           {/* Stats grid */}
@@ -179,7 +180,7 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
             {[
               ['STARTED',   status?.startedAt ? new Date(status.startedAt).toLocaleTimeString('en-CA', { hour12: false }) : '—', 'UTC'],
               ['ELAPSED',   `${mm}:${ss}`, 'running'],
-              ['SCENARIOS', `${status?.completedScenarios ?? 0} / ${status?.totalScenarios ?? 0}`, `${progress}%`],
+              ['SCENARIOS', `${status?.completedScenarios ?? 0} / ${status?.totalScenarios ?? 0}`, `${progress.toFixed(1)}%`],
               ['PAGES',     String(status?.pageCount ?? 0), 'discovered'],
             ].map(([k, v, sub], i) => (
               <div key={k} style={{ padding: '14px 20px', borderLeft: i === 0 ? 'none' : `1px solid ${C.ink70}` }}>
@@ -194,7 +195,7 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontFamily: F.mono, fontSize: 10, color: C.sandDeeper, letterSpacing: 0.5 }}>
               <span>OVERALL PROGRESS</span>
-              <span>{progress}%</span>
+              <span>{progress.toFixed(1)}%</span>
             </div>
             <div style={{ height: 10, background: C.ink90, border: `1px solid ${C.ink70}`, position: 'relative', overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `max(8px, ${progress}%)`, background: C.moss, transition: 'width .3s' }} />
@@ -271,9 +272,17 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
           color: C.ink70,
           lineHeight: 1.8,
         }}>
-          <div style={{ color: C.slate, letterSpacing: 1, fontSize: 10, marginBottom: 8 }}>WORKER · ACTIVITY</div>
-          {status?.status === 'queued' && 'Waiting for worker to pick up the job…'}
-          {status?.status === 'running' && `Worker is active — ${status.completedScenarios} of ${status.totalScenarios} scenarios completed across ${status.pageCount} pages.`}
+          <div style={{ color: C.slate, letterSpacing: 1, fontSize: 10, marginBottom: 8 }}>CURRENT ACTIVITY</div>
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ fontWeight: 600, color: C.amber }}>Phase:</span> {currentPhaseLabel}
+          </div>
+          {status?.currentActivity?.message && (
+            <div style={{ color: C.sand }}>
+              {status.currentActivity.message}
+            </div>
+          )}
+          {!status?.currentActivity?.message && status?.status === 'queued' && 'Waiting for worker to pick up the job…'}
+          {!status?.currentActivity?.message && status?.status === 'running' && `Worker is active — ${status.completedScenarios} of ${status.totalScenarios} scenarios completed across ${status.pageCount} pages.`}
           {status?.status === 'failed' && <span style={{ color: C.rust }}>Scan failed. Check worker logs for details.</span>}
           {status?.status === 'cancelled' && <span style={{ color: C.slate }}>Scan was cancelled.</span>}
           {!status && 'Connecting to API…'}
@@ -310,10 +319,11 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
 
   const sections = [
     ['scores', 'Scores', 'A'],
-    ['findings', 'Findings', 'B'],
-    ['pages', 'Pages', 'C'],
-    ['vendors', 'Vendors', 'D'],
-    ['evidence', 'Evidence', 'E'],
+    ['signals', 'Signals', 'B'],
+    ['findings', 'Findings', 'C'],
+    ['pages', 'Pages', 'D'],
+    ['vendors', 'Vendors', 'E'],
+    ['evidence', 'Evidence', 'F'],
   ] as const;
 
   function scrollTo(id: string) {
@@ -458,10 +468,34 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
             <ScoreCard label="Policy" value={report.scores.policyRuntimeAlignment} />
           </div>
 
-          {/* B · FINDINGS */}
+          {/* B · SIGNALS */}
+          <SectionHeader id="signals" tag="B" title="Privacy signals" caption="runtime detection heuristics" />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 16,
+            marginBottom: 48,
+          }}>
+            {[
+              ['Ad trackers', report.privacySignals.adTrackers],
+              ['Third-party cookies', report.privacySignals.thirdPartyCookies],
+              ['Cookie blocker evasion', report.privacySignals.cookieBlockerEvasion],
+              ['Canvas fingerprinting', report.privacySignals.canvasFingerprinting],
+              ['Session recorders', report.privacySignals.sessionRecorders],
+              ['Keystroke capture', report.privacySignals.keystrokeCapture],
+              ['Facebook Pixel', report.privacySignals.facebookPixel],
+              ['TikTok Pixel', report.privacySignals.tiktokPixel],
+              ['X Pixel', report.privacySignals.xPixel],
+              ['GA remarketing', report.privacySignals.googleAnalyticsRemarketing],
+            ].map(([label, signal]) => (
+              <SignalCard key={String(label)} label={String(label)} signal={signal as ScanReport['privacySignals'][keyof ScanReport['privacySignals']]} />
+            ))}
+          </div>
+
+          {/* C · FINDINGS */}
           <SectionHeader
             id="findings"
-            tag="B"
+            tag="C"
             title={`Findings (${report.findings.length})`}
             caption={`${report.findings.filter((f) => f.severity === 'critical').length} critical · ${report.findings.filter((f) => f.severity === 'high').length} high`}
             right={
@@ -512,8 +546,8 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
             ))}
           </div>
 
-          {/* C · PAGES */}
-          <SectionHeader id="pages" tag="C" title="Pages scanned" caption={`${report.pages.length} pages · 4 scenarios each`} />
+          {/* D · PAGES */}
+          <SectionHeader id="pages" tag="D" title="Pages scanned" caption={`${report.pages.length} pages · 4 scenarios each`} />
           <div style={{ border: `1px solid ${C.hairline}`, background: C.paper, marginBottom: 48 }}>
             <div style={{
               display: 'grid',
@@ -594,8 +628,8 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
             })}
           </div>
 
-          {/* D · VENDORS */}
-          <SectionHeader id="vendors" tag="D" title="Vendors & policy" caption="observed runtime vs. declared policy" />
+          {/* E · VENDORS */}
+          <SectionHeader id="vendors" tag="E" title="Vendors & policy" caption="observed runtime vs. declared policy" />
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1.2fr 1fr',
@@ -662,8 +696,8 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
             </div>
           </div>
 
-          {/* E · EVIDENCE */}
-          <SectionHeader id="evidence" tag="E" title="Evidence & regression delta" caption={report.diff ? 'vs. baseline scan' : 'no baseline set'} />
+          {/* F · EVIDENCE */}
+          <SectionHeader id="evidence" tag="F" title="Evidence & regression delta" caption={report.diff ? 'vs. baseline scan' : 'no baseline set'} />
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
@@ -830,6 +864,56 @@ function ScenarioCell({ status, count }: { status: string; count: number }) {
         {s.m}
       </span>
       <span style={{ fontFamily: F.mono, fontSize: 10, color: C.slate60 }}>{count}</span>
+    </div>
+  );
+}
+
+function SignalCard({
+  label,
+  signal,
+}: {
+  label: string;
+  signal: ScanReport['privacySignals'][keyof ScanReport['privacySignals']];
+}) {
+  return (
+    <div style={{
+      border: `1px solid ${signal.detected ? C.rust + '44' : C.hairline}`,
+      background: signal.detected ? C.rustBg + '88' : C.paper,
+      padding: 18,
+      minWidth: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{
+          width: 10,
+          height: 10,
+          background: signal.detected ? C.rust : C.moss,
+          display: 'inline-block',
+        }} />
+        <span style={{ fontFamily: F.mono, fontSize: 10, fontWeight: 700, letterSpacing: 1, color: C.slate60 }}>
+          {label.toUpperCase()}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: F.mono, fontSize: 10, color: C.slate }}>{signal.count}</span>
+      </div>
+      <div style={{ fontSize: 15, lineHeight: 1.45, color: C.ink, marginBottom: signal.entities.length > 0 ? 10 : 0 }}>
+        {signal.summary}
+      </div>
+      {signal.entities.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {signal.entities.slice(0, 6).map((entity) => (
+            <span key={entity} style={{
+              padding: '4px 7px',
+              background: C.sandDeep,
+              border: `1px solid ${C.hairline}`,
+              fontFamily: F.mono,
+              fontSize: 10,
+              color: C.ink70,
+            }}>
+              {entity}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

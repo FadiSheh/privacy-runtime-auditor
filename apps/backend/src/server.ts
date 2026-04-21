@@ -6,12 +6,12 @@ import { z } from 'zod';
 
 import { migrations } from '@pra/db';
 import { renderPdfReport } from '@pra/report-generator';
-import { createLogger } from '@pra/utils';
+import { createLogger, normalizeUrl } from '@pra/utils';
 
 import { getConfig } from './config';
 import { pingDatabase } from './lib/database';
 import { listProjects, createProject, getProjectById, updateProject, deleteProject } from './lib/projects';
-import { buildCompletedScanReport, buildJsonReport } from './lib/reports';
+import { buildCompletedScanReport, buildJsonReport, buildPrivacyDependentTrackerList } from './lib/reports';
 import {
   createScan,
   getScan,
@@ -28,9 +28,21 @@ import { listVendors } from './lib/vendors';
 
 const logger = createLogger('pra-api');
 
+const rootUrlSchema = z.string().trim().min(1).transform((value, context) => {
+  try {
+    return normalizeUrl(value);
+  } catch {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Invalid root URL',
+    });
+    return z.NEVER;
+  }
+});
+
 const projectInputSchema = z.object({
   name: z.string().min(1),
-  rootUrl: z.string().url(),
+  rootUrl: rootUrlSchema,
   defaultLocale: z.string().optional(),
   defaultRegion: z.string().optional(),
   config: z.unknown().optional(),
@@ -179,6 +191,12 @@ export async function buildServer() {
     const typedRequest = request as FastifyRequest<{ Params: { id: string } }>;
     const params = z.object({ id: z.string() }).parse(typedRequest.params);
     return getScanPolicies(params.id);
+  });
+
+  app.get('/scans/:id/privacy-dependent-trackers', async (request) => {
+    const typedRequest = request as FastifyRequest<{ Params: { id: string } }>;
+    const params = z.object({ id: z.string() }).parse(typedRequest.params);
+    return buildPrivacyDependentTrackerList(params.id);
   });
 
   app.get('/scans/:id/report.json', async (request) => {

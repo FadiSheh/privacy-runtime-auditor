@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { customAlphabet } from 'nanoid';
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import { chromium, type BrowserContext, type Page, type Request as PlaywrightRequest } from 'playwright';
 
 import type {
   ConsentAction,
@@ -37,6 +37,12 @@ const actionMatchers: Array<{ action: ConsentAction; patterns: RegExp[] }> = [
 ];
 
 const scenarioSequence: ScenarioType[] = ['no-consent', 'accept-all', 'reject-all', 'granular'];
+
+interface BrowserInstrumentationSnapshot {
+  browserApis: Array<{ name: string; count: number; scriptUrl: string | null }>;
+  eventListeners: Array<{ eventType: string; tagName: string; capturesKeystrokes: boolean }>;
+  networkDuringInput: Array<{ channel: string; inputType: string | null; url: string }>;
+}
 
 function getChromiumLaunchOptions() {
   const executablePath = resolveChromiumPath();
@@ -208,12 +214,15 @@ async function runScenario(url: string, pageKind: PageKind, scenarioType: Scenar
   const context = await browser.newContext();
   const page = await context.newPage();
   const requests: RuntimeArtifact[] = [];
+  const requestArtifacts = new Map<PlaywrightRequest, RuntimeArtifact>();
   const startedAt = Date.now();
+
+  await installPageInstrumentation(page);
 
   page.on('request', (request) => {
     const requestUrl = request.url();
     const classification = classifyUrl(requestUrl, options.rootUrl);
-    requests.push({
+    const artifact: RuntimeArtifact = {
       id: createId('artifact'),
       artifactType: 'request',
       name: request.resourceType(),
@@ -228,8 +237,32 @@ async function runScenario(url: string, pageKind: PageKind, scenarioType: Scenar
       raw: {
         method: request.method(),
         resourceType: request.resourceType(),
+        headers: request.headers(),
+        postData: request.postData(),
       },
-    });
+    };
+    requests.push(artifact);
+    requestArtifacts.set(request, artifact);
+  });
+
+  page.on('response', async (response) => {
+    const artifact = requestArtifacts.get(response.request());
+    if (!artifact) {
+      return;
+    }
+
+    try {
+      artifact.raw = {
+        ...artifact.raw,
+        status: response.status(),
+        responseHeaders: await response.allHeaders(),
+      };
+    } catch {
+      artifact.raw = {
+        ...artifact.raw,
+        status: response.status(),
+      };
+    }
   });
 
   try {
@@ -244,6 +277,7 @@ async function runScenario(url: string, pageKind: PageKind, scenarioType: Scenar
     const storageArtifacts = await collectStorageArtifacts(page, url, startedAt, options.rootUrl);
     const domArtifacts = await collectDomArtifacts(page, url, startedAt, options.rootUrl);
     const cookieArtifacts = await collectCookieArtifacts(context, startedAt, options.rootUrl);
+  const instrumentationArtifacts = await collectInstrumentationArtifacts(page, url, startedAt, options.rootUrl);
 
     const screenshotPath = join(options.outputPath, `${sanitizeFilename(url)}-${scenarioType}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -252,7 +286,7 @@ async function runScenario(url: string, pageKind: PageKind, scenarioType: Scenar
       scenarioType,
       status: 'completed',
       consent,
-      artifacts: [...requests, ...cookieArtifacts, ...storageArtifacts, ...domArtifacts],
+      artifacts: [...requests, ...cookieArtifacts, ...storageArtifacts, ...domArtifacts, ...instrumentationArtifacts],
       screenshotPath,
       bannerScreenshotPath: null,
       domEvidence: [consent.htmlSnippet].filter(Boolean),
@@ -493,6 +527,89 @@ async function collectDomArtifacts(page: Page, pageUrl: string, startedAt: numbe
   ];
 }
 
+async function collectInstrumentationArtifacts(page: Page, pageUrl: string, startedAt: number, rootUrl: string): Promise<RuntimeArtifact[]> {
+  const rootHost = new URL(rootUrl).hostname;
+  const pageHost = new URL(pageUrl).hostname;
+  const snapshot = await page.evaluate<BrowserInstrumentationSnapshot>(() => {
+    const empty = { browserApis: [], eventListeners: [], networkDuringInput: [] };
+    const state = (window as typeof window & { __praSignals?: unknown }).__praSignals;
+    if (!state || typeof state !== 'object') {
+      return empty;
+    }
+
+    const typed = state as {
+      browserApis?: Record<string, { count: number; scriptUrl?: string | null }>;
+      eventListeners?: Array<{ eventType: string; tagName: string; capturesKeystrokes: boolean }>;
+      networkDuringInput?: Array<{ channel: string; inputType: string | null; url: string }>;
+    };
+
+    return {
+      browserApis: Object.entries(typed.browserApis ?? {}).map(([name, entry]) => ({
+        name,
+        count: entry.count,
+        scriptUrl: entry.scriptUrl ?? null,
+      })),
+      eventListeners: Array.isArray(typed.eventListeners) ? typed.eventListeners : [],
+      networkDuringInput: Array.isArray(typed.networkDuringInput) ? typed.networkDuringInput : [],
+    };
+  });
+
+  return [
+    ...snapshot.browserApis.map((entry) => {
+      const sourceUrl = entry.scriptUrl ?? pageUrl;
+      const classification = safeClassifyUrl(sourceUrl, rootUrl) ?? classifyHost(pageHost, rootHost);
+      return {
+        id: createId('artifact'),
+        artifactType: 'browser-api' as const,
+        name: entry.name,
+        domain: tryGetHostname(sourceUrl) ?? pageHost,
+        url: sourceUrl,
+        vendorId: classification.vendorId,
+        vendorName: classification.vendorName,
+        category: classification.category,
+        firstParty: classification.firstParty,
+        confidence: classification.confidence,
+        timestampOffsetMs: Date.now() - startedAt,
+        raw: { callCount: entry.count },
+      } satisfies RuntimeArtifact;
+    }),
+    ...snapshot.eventListeners.map((entry) => ({
+      id: createId('artifact'),
+      artifactType: 'event-listener' as const,
+      name: entry.eventType,
+      domain: pageHost,
+      url: pageUrl,
+      ...classifyHost(pageHost, rootHost),
+      timestampOffsetMs: Date.now() - startedAt,
+      raw: {
+        tagName: entry.tagName,
+        capturesKeystrokes: entry.capturesKeystrokes,
+      },
+    })),
+    ...snapshot.networkDuringInput.map((entry) => {
+      const classification = safeClassifyUrl(entry.url, rootUrl) ?? classifyHost(pageHost, rootHost);
+      return {
+        id: createId('artifact'),
+        artifactType: 'event-listener' as const,
+        name: `input-network:${entry.channel}`,
+        domain: tryGetHostname(entry.url) ?? pageHost,
+        url: entry.url,
+        vendorId: classification.vendorId,
+        vendorName: classification.vendorName,
+        category: classification.category,
+        firstParty: classification.firstParty,
+        confidence: classification.confidence,
+        timestampOffsetMs: Date.now() - startedAt,
+        raw: {
+          channel: entry.channel,
+          inputType: entry.inputType,
+          transmittedDuringInput: true,
+        },
+      } satisfies RuntimeArtifact;
+    }),
+  ];
+}
+
 function toDomArtifact(type: 'script' | 'iframe', src: string, startedAt: number, rootHost: string): RuntimeArtifact {
   const classification = classifyUrl(src, `https://${rootHost}`);
   return {
@@ -563,6 +680,160 @@ function classifyHost(host: string, rootHost: string) {
 function classifyUrl(url: string, rootUrl: string) {
   const host = new URL(url).hostname;
   return classifyHost(host, new URL(rootUrl).hostname);
+}
+
+function safeClassifyUrl(url: string, rootUrl: string) {
+  try {
+    return classifyUrl(url, rootUrl);
+  } catch {
+    return null;
+  }
+}
+
+function tryGetHostname(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+async function installPageInstrumentation(page: Page) {
+  await page.addInitScript(() => {
+    const target = window as typeof window & {
+      __praSignals?: {
+        browserApis: Record<string, { count: number; scriptUrl?: string | null }>;
+        eventListeners: Array<{ eventType: string; tagName: string; capturesKeystrokes: boolean }>;
+        networkDuringInput: Array<{ channel: string; inputType: string | null; url: string }>;
+      };
+    };
+
+    if (target.__praSignals) {
+      return;
+    }
+
+    target.__praSignals = {
+      browserApis: {},
+      eventListeners: [],
+      networkDuringInput: [],
+    };
+
+    const state = target.__praSignals;
+    let lastInputType: string | null = null;
+    let lastInputAt = 0;
+
+    const markBrowserApi = (name: string) => {
+      const current = state.browserApis[name] ?? { count: 0, scriptUrl: null };
+      current.count += 1;
+      current.scriptUrl ??= document.currentScript instanceof HTMLScriptElement ? document.currentScript.src : null;
+      state.browserApis[name] = current;
+    };
+
+    const patchMethod = (holder: Record<string, unknown> | undefined, key: string, label: string) => {
+      if (!holder || typeof holder[key] !== 'function') {
+        return;
+      }
+
+      const original = holder[key] as (...args: unknown[]) => unknown;
+      if ((original as { __praWrapped?: boolean }).__praWrapped) {
+        return;
+      }
+
+      const wrapped = function patchedMethod(this: unknown, ...args: unknown[]) {
+        markBrowserApi(label);
+        return original.apply(this, args);
+      };
+
+      (wrapped as { __praWrapped?: boolean }).__praWrapped = true;
+      holder[key] = wrapped;
+    };
+
+    patchMethod(HTMLCanvasElement.prototype as unknown as Record<string, unknown>, 'toDataURL', 'canvas.toDataURL');
+    patchMethod(HTMLCanvasElement.prototype as unknown as Record<string, unknown>, 'toBlob', 'canvas.toBlob');
+    patchMethod(CanvasRenderingContext2D.prototype as unknown as Record<string, unknown>, 'getImageData', 'canvas.getImageData');
+    patchMethod(CanvasRenderingContext2D.prototype as unknown as Record<string, unknown>, 'measureText', 'canvas.measureText');
+
+    if ('WebGLRenderingContext' in window) {
+      patchMethod(WebGLRenderingContext.prototype as unknown as Record<string, unknown>, 'getParameter', 'webgl.getParameter');
+      patchMethod(WebGLRenderingContext.prototype as unknown as Record<string, unknown>, 'readPixels', 'webgl.readPixels');
+      patchMethod(WebGLRenderingContext.prototype as unknown as Record<string, unknown>, 'getSupportedExtensions', 'webgl.getSupportedExtensions');
+    }
+
+    const originalAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function patchedAddEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+      const eventType = String(type);
+
+      try {
+        const tagName = this instanceof Element
+          ? this.tagName.toLowerCase()
+          : this === document
+            ? 'document'
+            : this === window
+              ? 'window'
+              : this && typeof this === 'object' && 'constructor' in this && typeof this.constructor === 'function'
+                ? this.constructor.name.toLowerCase()
+                : 'unknown';
+
+        const formSurface = tagName === 'input' || tagName === 'textarea' || tagName === 'select' || tagName === 'form' || tagName === 'document' || tagName === 'window';
+        const tracksBehavior = /^(keydown|keyup|keypress|beforeinput|input|change|mousemove|scroll|click)$/i.test(eventType);
+
+        if (formSurface && tracksBehavior) {
+          state.eventListeners.push({
+            eventType,
+            tagName,
+            capturesKeystrokes: /^(keydown|keyup|keypress|beforeinput|input|change)$/i.test(eventType),
+          });
+        }
+      } catch {
+        // Keep the page functional if instrumentation cannot inspect a target.
+      }
+
+      return originalAddEventListener.call(this, eventType, listener, options);
+    };
+
+    const recordInput = (event: Event) => {
+      lastInputType = event.type;
+      lastInputAt = Date.now();
+    };
+
+    ['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'change'].forEach((eventName) => {
+      document.addEventListener(eventName, recordInput, true);
+    });
+
+    const recordNetworkDuringInput = (channel: string, url: string) => {
+      if (!url || Date.now() - lastInputAt > 1500) {
+        return;
+      }
+
+      state.networkDuringInput.push({ channel, inputType: lastInputType, url });
+    };
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (async (...args: Parameters<typeof fetch>) => {
+      const input = args[0];
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      recordNetworkDuringInput('fetch', url);
+      return originalFetch(...args);
+    }) as typeof fetch;
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function patchedOpen(method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
+      (this as XMLHttpRequest & { __praUrl?: string }).__praUrl = String(url);
+      return originalOpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
+    };
+
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function patchedSend(body?: Document | XMLHttpRequestBodyInit | null) {
+      recordNetworkDuringInput('xhr', (this as XMLHttpRequest & { __praUrl?: string }).__praUrl ?? '');
+      return originalSend.call(this, body);
+    };
+
+    const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = (url: string | URL, data?: BodyInit | null) => {
+      recordNetworkDuringInput('beacon', String(url));
+      return originalSendBeacon(url, data);
+    };
+  });
 }
 
 function sanitizeFilename(url: string) {
