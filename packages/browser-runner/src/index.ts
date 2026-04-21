@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { customAlphabet } from 'nanoid';
 import { chromium, type BrowserContext, type Page } from 'playwright';
 
 import type {
@@ -13,8 +15,9 @@ import type {
   ScenarioScanResult,
   ScenarioType,
 } from '@pra/shared';
-import { createId, normalizeUrl, sameHostname } from '@pra/utils';
 import { classifyVendorByHost } from '@pra/vendor-registry';
+
+const idAlphabet = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyz', 16);
 
 const pageKindMatchers: Array<{ kind: PageKind; pattern: RegExp }> = [
   { kind: 'legal', pattern: /privacy|cookie|policy|terms/i },
@@ -35,6 +38,69 @@ const actionMatchers: Array<{ action: ConsentAction; patterns: RegExp[] }> = [
 
 const scenarioSequence: ScenarioType[] = ['no-consent', 'accept-all', 'reject-all', 'granular'];
 
+function getChromiumLaunchOptions() {
+  const executablePath = resolveChromiumPath();
+
+  return {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    ...(executablePath ? { executablePath } : {}),
+  };
+}
+
+function createId(prefix: string): string {
+  return `${prefix}_${idAlphabet()}`;
+}
+
+function normalizeUrl(input: string): string {
+  const raw = input.trim();
+  if (!raw) {
+    throw new Error('URL cannot be empty');
+  }
+
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const url = new URL(candidate);
+
+  url.protocol = url.protocol.toLowerCase();
+  url.hostname = url.hostname.toLowerCase();
+
+  if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) {
+    url.port = '';
+  }
+
+  if (!url.pathname) {
+    url.pathname = '/';
+  }
+
+  if (url.pathname !== '/' && url.pathname.endsWith('/')) {
+    url.pathname = url.pathname.slice(0, -1);
+  }
+
+  url.hash = '';
+  return url.toString();
+}
+
+function sameHostname(source: string, candidate: string, allowedSubdomains: string[] = []): boolean {
+  const sourceUrl = new URL(normalizeUrl(source));
+  const candidateUrl = new URL(normalizeUrl(candidate));
+
+  if (candidateUrl.hostname === sourceUrl.hostname) {
+    return true;
+  }
+
+  return allowedSubdomains.some((subdomain) => candidateUrl.hostname === subdomain.toLowerCase());
+}
+
+function resolveChromiumPath() {
+  const configuredPath = process.env.CHROMIUM_PATH;
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  const candidates = ['/usr/bin/chromium', '/usr/bin/chromium-browser'];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 export interface BrowserScanOptions {
   rootUrl: string;
   config: ScanConfig;
@@ -47,7 +113,7 @@ export interface BrowserScanResult {
 }
 
 export async function discoverPages(rootUrl: string, config: ScanConfig): Promise<Array<{ url: string; pageKind: PageKind }>> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(getChromiumLaunchOptions());
   const page = await browser.newPage();
   await page.goto(rootUrl, { waitUntil: 'domcontentloaded', timeout: config.scanTimeoutMs });
   await page.waitForTimeout(Math.min(config.preActionWaitMs, 3000));
@@ -90,7 +156,7 @@ export async function discoverPages(rootUrl: string, config: ScanConfig): Promis
 }
 
 export async function fetchPageHtml(url: string): Promise<string> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(getChromiumLaunchOptions());
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   const html = await page.content();
@@ -126,7 +192,7 @@ export async function runBrowserScan(options: BrowserScanOptions): Promise<Brows
 }
 
 async function runScenario(url: string, pageKind: PageKind, scenarioType: ScenarioType, options: BrowserScanOptions): Promise<ScenarioScanResult> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(getChromiumLaunchOptions());
   const context = await browser.newContext();
   const page = await context.newPage();
   const requests: RuntimeArtifact[] = [];
@@ -206,8 +272,17 @@ async function runScenario(url: string, pageKind: PageKind, scenarioType: Scenar
 }
 
 async function detectConsentUi(page: Page): Promise<ConsentUiDetection> {
-  const buttons = await page.locator('button, [role="button"], a').evaluateAll((elements) =>
-    elements
+  const buttons = await page.locator('button, [role="button"], a').evaluateAll((elements) => {
+    function buildSel(el: Element): string {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.id) {
+        return `#${htmlEl.id.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`;
+      }
+      const cls = Array.from(htmlEl.classList).slice(0, 2).map((c) => c.replace(/[^a-zA-Z0-9_-]/g, '\\$&')).join('.');
+      const tag = htmlEl.tagName.toLowerCase();
+      return cls ? `${tag}.${cls}` : tag;
+    }
+    return elements
       .map((element) => {
         const text = (element.textContent ?? '').trim();
         if (!text) {
@@ -215,11 +290,11 @@ async function detectConsentUi(page: Page): Promise<ConsentUiDetection> {
         }
         return {
           label: text,
-          selector: buildSelector(element),
+          selector: buildSel(element),
         };
       })
-      .filter((button): button is { label: string; selector: string } => Boolean(button)),
-  );
+      .filter((button): button is { label: string; selector: string } => Boolean(button));
+  });
 
   const matchedButtons = buttons
     .map((button) => {
@@ -449,20 +524,6 @@ function inferCmpVendor(html: string) {
   return null;
 }
 
-function buildSelector(element: Element) {
-  const htmlElement = element as HTMLElement;
-  if (htmlElement.id) {
-    return `#${cssEscape(htmlElement.id)}`;
-  }
-  const className = Array.from(htmlElement.classList).slice(0, 2).map(cssEscape).join('.');
-  const tagName = htmlElement.tagName.toLowerCase();
-  return className ? `${tagName}.${className}` : tagName;
-}
-
-function cssEscape(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-}
-
 function emptyConsentUi(): ConsentUiDetection {
   return {
     present: false,
@@ -493,5 +554,6 @@ function classifyUrl(url: string, rootUrl: string) {
 }
 
 function sanitizeFilename(url: string) {
-  return url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const raw = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return raw.length > 180 ? raw.slice(0, 180) : raw;
 }
