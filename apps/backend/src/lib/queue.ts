@@ -7,7 +7,7 @@ import { getConfig } from '../config';
 
 export const scanQueueName = 'pra-scan-queue';
 
-type ScanQueueLike = Pick<Queue<ScanJob>, 'add'>;
+type ScanQueueLike = Pick<Queue<ScanJob>, 'add' | 'getJob' | 'remove'>;
 
 let queue: ScanQueueLike | null = null;
 
@@ -25,6 +25,8 @@ export function getScanQueue(): ScanQueueLike {
   if (getConfig().REDIS_URL === 'memory') {
     queue = {
       add: async (_name, data) => ({ id: data.id } as Awaited<ReturnType<Queue<ScanJob>['add']>>),
+      getJob: async () => null,
+      remove: async () => 0,
     };
     return queue;
   }

@@ -32,7 +32,7 @@ export interface ProjectSummary {
 
 export interface ScanStatus {
   scanId: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   pageCount: number;
   completedScenarios: number;
@@ -138,6 +138,12 @@ export async function startScan(projectId: string) {
 
 export async function fetchScanStatus(scanId: string) {
   return request<ScanStatus>(`/scans/${scanId}/status`);
+}
+
+export async function cancelScan(scanId: string) {
+  return request<{ scanId: string; cancelled?: boolean; alreadyTerminal?: boolean }>(`/scans/${scanId}/cancel`, {
+    method: 'POST',
+  });
 }
 
 export async function fetchScanReport(scanId: string) {

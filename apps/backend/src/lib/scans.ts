@@ -123,6 +123,40 @@ export async function getScanStatus(scanId: string) {
   };
 }
 
+export async function cancelScan(scanId: string) {
+  const scan = await getScan(scanId);
+
+  if (!scan) {
+    return null;
+  }
+
+  if (scan.status !== 'queued' && scan.status !== 'running') {
+    return { scanId, alreadyTerminal: true };
+  }
+
+  const { db } = await getDatabase();
+
+  // Try to remove from queue (works for queued jobs)
+  const queue = getScanQueue();
+  const job = await queue.getJob(scanId);
+  if (job) {
+    await job.remove();
+  }
+
+  // Publish a cancellation signal so the worker can abort a running job
+  const { getRedisConnection } = await import('./queue');
+  const redis = getRedisConnection();
+  await redis.set(`pra:cancel:${scanId}`, '1', 'EX', 300);
+  await redis.quit();
+
+  // Mark the scan as cancelled in the DB
+  await db.update(scans)
+    .set({ status: 'cancelled', finishedAt: new Date() })
+    .where(eq(scans.id, scanId));
+
+  return { scanId, cancelled: true };
+}
+
 export async function getScanDiff(scanId: string) {
   const { db } = await getDatabase();
   const result = await db.select().from(scanDiffs).where(eq(scanDiffs.comparedScanId, scanId)).limit(1);

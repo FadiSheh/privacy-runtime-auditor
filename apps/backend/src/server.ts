@@ -22,6 +22,7 @@ import {
   getScanStatus,
   listProjectScans,
   setBaseline,
+  cancelScan,
 } from './lib/scans';
 import { listVendors } from './lib/vendors';
 
@@ -207,6 +208,18 @@ export async function buildServer() {
     const typedRequest = request as FastifyRequest<{ Params: { id: string } }>;
     const params = z.object({ id: z.string() }).parse(typedRequest.params);
     return setBaseline(params.id);
+  });
+
+  app.post('/scans/:id/cancel', async (request, reply) => {
+    const typedRequest = request as FastifyRequest<{ Params: { id: string } }>;
+    const typedReply = reply as FastifyReply;
+    const params = z.object({ id: z.string() }).parse(typedRequest.params);
+    const result = await cancelScan(params.id);
+    if (!result) {
+      typedReply.code(404);
+      return { message: 'Scan not found' };
+    }
+    return result;
   });
 
   app.get('/vendors', async () => listVendors());

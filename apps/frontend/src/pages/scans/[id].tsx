@@ -7,7 +7,7 @@ import { ScoreCard } from '../../components/score-card';
 import { SeverityBadge } from '../../components/severity-badge';
 import { StatusBadge } from '../../components/status-badge';
 import { C, F } from '../../lib/tokens';
-import { fetchScanReport, fetchScanStatus, type ScanReport, type ScanStatus } from '../../lib/api';
+import { fetchScanReport, fetchScanStatus, cancelScan, type ScanReport, type ScanStatus } from '../../lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -30,7 +30,7 @@ function usePollingScan(scanId: string) {
         if (active) setReport(r);
         return;
       }
-      if (next.status !== 'failed') {
+      if (next.status !== 'failed' && next.status !== 'cancelled') {
         timer = setTimeout(() => { void tick(); }, 2500);
       }
     };
@@ -96,7 +96,17 @@ export default function ScanPage() {
 // ── Live scan view ────────────────────────────────────────────────────────────
 function LiveScanView({ scanId, status, projectId }: { scanId: string; status: ScanStatus | null; projectId: string }) {
   const [elapsed, setElapsed] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
   const startRef = useRef<number | null>(null);
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      await cancelScan(scanId);
+    } catch {
+      setCancelling(false);
+    }
+  }
 
   useEffect(() => {
     if (status?.startedAt && !startRef.current) {
@@ -229,6 +239,23 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
             }}>
               ← BACK TO PROJECTS
             </Link>
+            {(status?.status === 'queued' || status?.status === 'running') && (
+              <button
+                onClick={() => { void handleCancel(); }}
+                disabled={cancelling}
+                style={{
+                  background: 'transparent',
+                  color: cancelling ? C.slate30 : C.rust,
+                  border: `1px solid ${cancelling ? C.ink70 : C.rust}`,
+                  padding: '0 16px', height: 36,
+                  fontFamily: F.mono, fontSize: 11, fontWeight: 600, letterSpacing: 1,
+                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                  opacity: cancelling ? 0.6 : 1,
+                }}
+              >
+                {cancelling ? 'CANCELLING…' : '✕ CANCEL SCAN'}
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -248,6 +275,7 @@ function LiveScanView({ scanId, status, projectId }: { scanId: string; status: S
           {status?.status === 'queued' && 'Waiting for worker to pick up the job…'}
           {status?.status === 'running' && `Worker is active — ${status.completedScenarios} of ${status.totalScenarios} scenarios completed across ${status.pageCount} pages.`}
           {status?.status === 'failed' && <span style={{ color: C.rust }}>Scan failed. Check worker logs for details.</span>}
+          {status?.status === 'cancelled' && <span style={{ color: C.slate }}>Scan was cancelled.</span>}
           {!status && 'Connecting to API…'}
         </div>
         <div style={{
