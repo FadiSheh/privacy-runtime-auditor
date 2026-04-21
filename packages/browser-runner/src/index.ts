@@ -313,7 +313,7 @@ async function detectConsentUi(page: Page): Promise<ConsentUiDetection> {
   const bodyText = (await page.locator('body').innerText()).slice(0, 1000);
   const bannerText = bodyText
     .split(/\n+/)
-    .find((line) => /cookie|privacy|consent|preferences/i.test(line))
+    .find((line) => /cookie|consent|preferences/i.test(line))
     ?.trim() ?? '';
 
   const htmlSnippet = await page.locator('body').evaluate((element) => element.innerHTML.slice(0, 2000));
@@ -321,7 +321,7 @@ async function detectConsentUi(page: Page): Promise<ConsentUiDetection> {
   const granularControlsPresent = matchedButtons.some((button) => button.action === 'open-preferences' || button.action === 'save-preferences');
 
   return {
-    present: matchedButtons.length > 0 || /cookie|consent|privacy/i.test(bannerText),
+    present: matchedButtons.length > 0 || /cookie|consent|preferences/i.test(bannerText),
     cmpVendor: inferCmpVendor(htmlSnippet),
     rejectVisible,
     granularControlsPresent,

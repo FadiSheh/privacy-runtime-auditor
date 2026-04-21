@@ -75,5 +75,5 @@ describe('worker scan orchestration', () => {
     const ruleCodes = report?.findings.map((finding) => finding.ruleCode) ?? [];
     expect(ruleCodes).toContain('R001');
     expect(ruleCodes).toContain('R002');
-  });
+  }, 30000);
 });

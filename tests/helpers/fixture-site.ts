@@ -111,12 +111,16 @@ function renderPage(kind: keyof typeof pages, path: string) {
   `;
 }
 
+function isFixtureKind(kind: string): kind is keyof typeof pages {
+  return kind in pages;
+}
+
 export async function startFixtureServer(): Promise<FixtureServer> {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     const [, kind, slug = ''] = url.pathname.split('/');
-    const siteKind = (kind || 'compliant') as keyof typeof pages;
-    const page = pages[siteKind] ?? pages.compliant;
+    const siteKind = isFixtureKind(kind) ? kind : 'compliant';
+    const page = pages[siteKind];
 
     response.setHeader('content-type', 'text/html; charset=utf-8');
 
