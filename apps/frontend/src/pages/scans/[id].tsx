@@ -451,8 +451,7 @@ function ReportView({ scanId, report, vendors, declaredVendors }: ReportViewProp
             border: `1px solid ${C.hairline}`,
             marginBottom: 48,
           }}>
-            <ScoreCard primary label="Overall" value={report.scores.overall}
-              interpretation={`Risk level: ${report.riskLevel}.`} />
+            <ScoreCard primary label="Overall" value={report.scores.overall} />
             <ScoreCard label="Pre-consent" value={report.scores.preConsentBehavior} />
             <ScoreCard label="Consent UX" value={report.scores.consentUx} />
             <ScoreCard label="Blocking" value={report.scores.runtimeBlockingEffectiveness} />
