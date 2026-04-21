@@ -9,13 +9,17 @@ const SESSION_RECORDER_VENDORS = new Set([
   'vendor_lucky_orange',
 ]);
 
-const IDENTIFIER_PARAM_PATTERN = /(gclid|fbclid|msclkid|ttclid|twclid|_gl|uid|user_?id|visitor_?id|device_?id|fingerprint|session_?id|cid|guid|uuid|partner_?id|adid|match|sync)/i;
+const IDENTIFIER_PARAM_PATTERN = /^(gclid|fbclid|msclkid|ttclid|twclid|_gl|uid|user_?id|visitor_?id|device_?id|fingerprint|session_?id|cid|guid|uuid|partner_?id|adid|match|sync)$/i;
 const CANVAS_METHOD_PATTERN = /(canvas\.(toDataURL|toBlob|getImageData|measureText)|webgl\.(getParameter|readPixels|getSupportedExtensions))/i;
 const KEYSTROKE_EVENT_PATTERN = /^(keydown|keyup|keypress|beforeinput|input|change)$/i;
 const FACEBOOK_PIXEL_PATTERN = /(connect\.facebook\.net\/.*fbevents\.js|facebook\.com\/tr\?|fbq\()/i;
 const TIKTOK_PIXEL_PATTERN = /(analytics\.tiktok\.com|tiktok\.pixels\.tiktok\.com|ttq\.|ttq\()/i;
 const X_PIXEL_PATTERN = /(analytics\.twitter\.com|static\.ads-twitter\.com|platform\.twitter\.com|twq\()/i;
 const REMARKETING_PATTERN = /(googleadservices\.com|doubleclick\.net|ads\/ga-audiences|remarketing|allow_ad_personalization_signals|gclid|dma=|npa=0)/i;
+const TRACKING_CATEGORY_PATTERN = /^(analytics|advertising|marketing|social)$/;
+const TRACKING_ENDPOINT_PATTERN = /\/(collect|track|tracking|pixel|beacon|event|events|conversion|remarketing|audience|analytics|ads?|sync|match)(\/|$|\?)/i;
+const STATIC_RESOURCE_TYPES = new Set(['document', 'stylesheet', 'image', 'media', 'font']);
+const STATIC_EXTENSION_PATTERN = /\.(avif|css|gif|ico|jpe?g|js|map|mjs|mp4|png|svg|webm|webp|woff2?|ttf|otf)(\?|$)/i;
 
 function flattenArtifacts(pages: PageScanResult[]): RuntimeArtifact[] {
   return pages.flatMap((page) => page.scenarioResults.flatMap((scenario) => scenario.artifacts));
@@ -48,9 +52,79 @@ function hasIdentifierSignal(artifact: RuntimeArtifact): boolean {
     return false;
   }
 
-  const url = artifact.url ?? '';
-  const postData = typeof artifact.raw.postData === 'string' ? artifact.raw.postData : '';
-  return IDENTIFIER_PARAM_PATTERN.test(url) || IDENTIFIER_PARAM_PATTERN.test(postData);
+  const identifierNames = [
+    ...getUrlParameterNames(artifact.url),
+    ...getFormEncodedParameterNames(typeof artifact.raw.postData === 'string' ? artifact.raw.postData : ''),
+  ];
+
+  return identifierNames.some((name) => IDENTIFIER_PARAM_PATTERN.test(name));
+}
+
+function getUrlParameterNames(url: string | null): string[] {
+  if (!url) {
+    return [];
+  }
+
+  try {
+    return Array.from(new URL(url).searchParams.keys());
+  } catch {
+    return [];
+  }
+}
+
+function getFormEncodedParameterNames(value: string): string[] {
+  if (!value || !value.includes('=')) {
+    return [];
+  }
+
+  try {
+    return Array.from(new URLSearchParams(value).keys());
+  } catch {
+    return [];
+  }
+}
+
+function isStaticContentRequest(artifact: RuntimeArtifact): boolean {
+  if (artifact.artifactType !== 'request') {
+    return false;
+  }
+
+  const resourceType = typeof artifact.raw.resourceType === 'string' ? artifact.raw.resourceType : '';
+  const responseHeaders = typeof artifact.raw.responseHeaders === 'object' && artifact.raw.responseHeaders !== null
+    ? artifact.raw.responseHeaders as Record<string, unknown>
+    : {};
+  const contentType = String(responseHeaders['content-type'] ?? responseHeaders['Content-Type'] ?? '');
+
+  return (
+    STATIC_RESOURCE_TYPES.has(resourceType) ||
+    STATIC_EXTENSION_PATTERN.test(artifact.url ?? '') ||
+    /^(image|font|text\/css|video|audio)\//i.test(contentType)
+  );
+}
+
+function isTrackingLikeArtifact(artifact: RuntimeArtifact): boolean {
+  const category = artifact.category ?? 'unknown';
+  if (TRACKING_CATEGORY_PATTERN.test(category)) {
+    return true;
+  }
+
+  if (artifact.artifactType !== 'request') {
+    return false;
+  }
+
+  return TRACKING_ENDPOINT_PATTERN.test(artifact.url ?? '');
+}
+
+function isCookieBlockerEvasionCandidate(artifact: RuntimeArtifact): boolean {
+  if (!isTrackingLikeArtifact(artifact)) {
+    return false;
+  }
+
+  if (isStaticContentRequest(artifact) && !TRACKING_CATEGORY_PATTERN.test(artifact.category ?? 'unknown')) {
+    return false;
+  }
+
+  return true;
 }
 
 function hasRemarketingSignal(artifact: RuntimeArtifact): boolean {
@@ -96,13 +170,16 @@ export function summarizePrivacySignals(pages: PageScanResult[]): PrivacySignals
   );
 
   const storageArtifacts = artifacts.filter(
-    (artifact) => artifact.artifactType === 'local-storage' || artifact.artifactType === 'session-storage' || artifact.artifactType === 'indexed-db',
+    (artifact) =>
+      (artifact.artifactType === 'local-storage' || artifact.artifactType === 'session-storage' || artifact.artifactType === 'indexed-db') &&
+      isCookieBlockerEvasionCandidate(artifact),
   );
   const storageSignals = uniq(storageArtifacts.map((artifact) => `${artifact.artifactType}:${artifact.name ?? artifact.domain ?? artifact.id}`));
 
   const etagArtifacts = artifacts.filter(
     (artifact) =>
       artifact.artifactType === 'request' &&
+      isCookieBlockerEvasionCandidate(artifact) &&
       typeof artifact.raw.responseHeaders === 'object' &&
       artifact.raw.responseHeaders !== null &&
       'etag' in (artifact.raw.responseHeaders as Record<string, unknown>),
@@ -113,9 +190,9 @@ export function summarizePrivacySignals(pages: PageScanResult[]): PrivacySignals
       Boolean(artifact.vendorId) &&
       (artifact.category === 'advertising' || artifact.category === 'analytics' || artifact.category === 'social'),
   );
-  const identifierArtifacts = artifacts.filter(hasIdentifierSignal);
+  const identifierArtifacts = artifacts.filter((artifact) => isCookieBlockerEvasionCandidate(artifact) && hasIdentifierSignal(artifact));
   const syncArtifacts = artifacts.filter(
-    (artifact) => artifact.artifactType === 'request' && /sync|redirect|match/i.test(artifact.url ?? ''),
+    (artifact) => artifact.artifactType === 'request' && isCookieBlockerEvasionCandidate(artifact) && /sync|redirect|match/i.test(artifact.url ?? ''),
   );
 
   const cookieBlockerSignals = uniq([

@@ -191,4 +191,82 @@ describe('summarizePrivacySignals', () => {
     expect(summary.xPixel.summary).toBe('X Pixel not found');
     expect(summary.googleAnalyticsRemarketing.summary).toBe("Google Analytics 'remarketing audiences' feature not found.");
   });
+
+  it('does not classify first-party static content as cookie-blocker evasion', () => {
+    const pages: PageScanResult[] = [
+      {
+        url: 'https://savoirfairelinux.com/',
+        normalizedUrl: 'https://savoirfairelinux.com/',
+        pageKind: 'homepage',
+        scenarioResults: [
+          {
+            scenarioType: 'no-consent',
+            status: 'completed',
+            consent: {
+              present: false,
+              cmpVendor: null,
+              rejectVisible: false,
+              granularControlsPresent: false,
+              bannerText: '',
+              htmlSnippet: '',
+              buttons: [],
+              limitations: [],
+            },
+            artifacts: [
+              {
+                id: 'image-with-etag',
+                artifactType: 'request',
+                name: 'image',
+                domain: 'savoirfairelinux.com',
+                url: 'https://savoirfairelinux.com/sites/default/files/styles/card/public/case-study.png?uuid=abc123',
+                vendorId: null,
+                vendorName: 'Unknown vendor',
+                category: 'unknown',
+                firstParty: true,
+                confidence: 0.1,
+                timestampOffsetMs: 10,
+                raw: {
+                  resourceType: 'image',
+                  responseHeaders: {
+                    etag: '"asset-version"',
+                    'content-type': 'image/png',
+                  },
+                },
+              },
+              {
+                id: 'css-with-id',
+                artifactType: 'request',
+                name: 'stylesheet',
+                domain: 'savoirfairelinux.com',
+                url: 'https://savoirfairelinux.com/themes/custom/site.css?cid=layout',
+                vendorId: null,
+                vendorName: 'Unknown vendor',
+                category: 'unknown',
+                firstParty: true,
+                confidence: 0.1,
+                timestampOffsetMs: 11,
+                raw: {
+                  resourceType: 'stylesheet',
+                  responseHeaders: {
+                    etag: '"css-version"',
+                    'content-type': 'text/css',
+                  },
+                },
+              },
+            ],
+            screenshotPath: null,
+            bannerScreenshotPath: null,
+            domEvidence: [],
+            errorMessage: null,
+            metadata: {},
+          },
+        ],
+      },
+    ];
+
+    const summary = summarizePrivacySignals(pages);
+
+    expect(summary.cookieBlockerEvasion.detected).toBe(false);
+    expect(summary.cookieBlockerEvasion.entities).toEqual([]);
+  });
 });
