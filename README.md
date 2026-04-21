@@ -7,6 +7,8 @@ A production-oriented runtime privacy compliance auditing platform for websites.
 - 🔍 **Dynamic Website Crawling** - Discover and analyze up to 15 relevant pages
 - 📋 **Multiple Consent Scenarios** - Test before consent, accept all, reject all, granular choices
 - 🎯 **Runtime Evidence Collection** - Cookies, localStorage, sessionStorage, IndexedDB, scripts, requests
+- 🧪 **Advanced Privacy Signal Detection** - Canvas/WebGL fingerprinting, session replay tools, key capture signals, pixel signatures, and cookie-blocker evasion heuristics
+- 🔄 **Privacy-Dependent Tracker Detection** - Highlights trackers that appear or disappear depending on consent state
 - 📊 **Findings & Scoring** - Rule-based analysis with severity levels and compliance scores
 - 📝 **Report Generation** - PDF and JSON reports with evidence and remediation hints
 - 🔄 **Historical Tracking** - Baseline scanning and regression detection
@@ -28,31 +30,52 @@ A production-oriented runtime privacy compliance auditing platform for websites.
    - **IndexedDB** databases and record counts
    - **Network requests** (URLs, methods, initiators)
    - **Script sources** loaded on the page
+   - **Browser instrumentation signals** (canvas/WebGL API calls, form listeners, input-correlated network sends)
 4. **Vendor classification** — Every cookie domain, request host, and script source is matched against the built-in vendor registry to identify known third-party trackers (Google Analytics, Meta Pixel, HotJar, etc.) and their declared purposes (analytics, advertising, functional, …).
-5. **Rule evaluation** — The rules engine runs 12 deterministic rules across the collected evidence to produce findings with severity levels.
-6. **Policy parsing** — The site's privacy policy URL (if resolvable) is fetched and parsed to cross-reference which vendors are disclosed vs. which are observed at runtime.
-7. **Scoring** — Four compliance dimension scores (0–100) and an overall score are computed from the findings.
-8. **Report generation** — A structured JSON report and a human-readable PDF report are produced and stored.
+5. **Advanced signal synthesis** — Collected artifacts are summarized into higher-level privacy signals such as ad tracker counts, third-party cookies, cookie-blocker evasion heuristics, canvas fingerprinting, session recorders, keystroke capture, pixel presence, and Google remarketing indicators.
+6. **Rule evaluation** — The rules engine runs 12 deterministic rules across the collected evidence to produce findings with severity levels.
+7. **Policy parsing** — The site's privacy policy URL (if resolvable) is fetched and parsed to cross-reference which vendors are disclosed vs. which are observed at runtime.
+8. **Scoring** — Four compliance dimension scores (0–100) and an overall score are computed from the findings.
+9. **Report generation** — A structured JSON report and a human-readable PDF report are produced and stored.
 
 ### What Is Analyzed
 
 | Evidence type | What PRA looks for |
-|---|---|
+| --- | --- |
 | Cookies set pre-consent | Tracking identifiers fired before the user consents — a GDPR/ePrivacy violation |
 | Cookies after reject | Cookies that persist after "Reject all" — proof of ineffective opt-out |
 | Storage (localStorage / sessionStorage / IndexedDB) | Non-functional data stored without consent |
 | Network requests | Third-party beacons and pixels sent before or despite rejection |
 | Loaded scripts | Third-party SDKs executing before consent |
+| Advanced browser signals | Canvas/WebGL calls, form event listeners, and requests triggered during typing |
 | Vendor classification | Whether observed vendors are disclosed in the privacy policy |
 | Consent banner behavior | Whether a banner is present, whether reject-all is as easy as accept-all (dark patterns) |
 | Granular controls | Whether selecting "functional only" actually limits data collection |
+| Privacy-dependent trackers | Which non-essential trackers change behavior across no-consent, accept-all, reject-all, and granular scenarios |
+
+### Advanced Detection Coverage
+
+In addition to rule-based compliance findings, PRA now synthesizes a privacy-signal summary from runtime artifacts. This summary is exposed in `report.json`, rendered in the PDF report, and displayed in the scan UI.
+
+| Signal | Detection strategy |
+| --- | --- |
+| Ad trackers | Third-party requests, scripts, and iframes classified as advertising vendors |
+| Third-party cookies | Browser cookies whose domain is not first-party for the scanned site |
+| Cookie-blocker evasion | Heuristics across storage writes, ETag presence, identifier-bearing requests, apparent ID sync endpoints, and first-party cloaked vendor traffic |
+| Canvas fingerprinting | Instrumented calls to canvas and WebGL APIs such as `toDataURL`, `getImageData`, `measureText`, `getParameter`, and `readPixels` |
+| Session recorders | Vendor and script matching for tools such as Hotjar, FullStory, Mouseflow, Contentsquare, Crazy Egg, and Lucky Orange |
+| Keystroke capture | Form/input listeners plus network transmissions observed immediately after typing events |
+| Facebook / TikTok / X Pixel | URL, script, and vendor signatures for known pixel endpoints and libraries |
+| Google Analytics remarketing | Google Ads / DoubleClick / GA request patterns associated with remarketing audiences |
+
+These signals are heuristic detections. They are intended to surface likely privacy-relevant behavior quickly, not to replace a manual forensic review when a legal-grade conclusion depends on edge cases.
 
 ### Understanding the Findings
 
 Each finding has a **rule ID**, a **severity** (critical / high / medium / low / info), a **page** where it was observed, and **evidence** (the specific cookies, requests, or vendors involved).
 
 | Rule | What it means |
-|---|---|
+| --- | --- |
 | **R001** Non-essential tracking before consent | A tracking cookie, pixel, or script fired before the user interacted with the consent banner. This is a direct GDPR/ePrivacy violation. |
 | **R002** Missing consent banner | No recognizable consent mechanism was detected on the page. |
 | **R003** Ineffective reject all | Cookies or requests observed after "Reject all" that were also present after "Accept all" — rejection has no real effect. |
@@ -71,7 +94,7 @@ Each finding has a **rule ID**, a **severity** (critical / high / medium / low /
 Scores range from **0** (non-compliant) to **100** (fully compliant). A score of 0 does not mean the site is broken — it means the dimension has critical unresolved findings.
 
 | Dimension | What it measures |
-|---|---|
+| --- | --- |
 | **Pre-consent** | How clean the page is before any user interaction |
 | **Consent UX** | Quality of the consent mechanism (banner presence, reject-all accessibility) |
 | **Blocking** | How effectively vendors are blocked after rejection |
@@ -214,6 +237,8 @@ Browser-driven Playwright tests simulating the full user flow from homepage to r
 npm test
 ```
 
+This command runs both unit and integration suites, including browser instrumentation coverage and worker orchestration in `REDIS_URL=memory` mode.
+
 ## Build & Production
 
 ### Local Build
@@ -231,6 +256,8 @@ npm run typecheck
 ```
 
 Validates TypeScript across all packages and apps.
+
+The repository typecheck includes the backend memory-queue path, the worker memory-cancellation path, browser instrumentation types, and the frontend report surfaces for privacy signals.
 
 ### Linting
 
@@ -270,6 +297,7 @@ docker compose down
 
 - `POST /projects/:id/scans` - Start a new scan
 - `GET /scans/:id/status` - Get scan status and progress
+- `GET /scans/:id/privacy-dependent-trackers` - List trackers whose behavior changes across consent scenarios
 - `GET /scans/:id/report.json` - Get JSON report
 - `GET /scans/:id/report.pdf` - Get PDF report
 - `POST /scans/:id/baseline` - Set as baseline scan
