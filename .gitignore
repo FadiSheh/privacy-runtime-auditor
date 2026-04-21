@@ -7,12 +7,16 @@ node_modules/
 /coverage
 /test-results
 /playwright-report
+**/test-results/
+**/playwright-report/
 
 # Production
 /build
 /dist
 /.next
+**/.next/
 /out
+**/out/
 
 # Environment variables
 .env
@@ -24,6 +28,7 @@ node_modules/
 # IDE
 .vscode/
 .idea/
+.codex
 *.swp
 *.swo
 *.iml
@@ -48,6 +53,7 @@ lerna-debug.log*
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
 
 # Runtime artifacts
 /data/uploads/*
