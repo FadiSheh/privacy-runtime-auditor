@@ -5,6 +5,8 @@ node_modules/
 
 # Testing
 /coverage
+/test-results
+/playwright-report
 
 # Production
 /build
@@ -46,3 +48,7 @@ lerna-debug.log*
 # Build outputs
 dist/
 build/
+
+# Runtime artifacts
+/data/uploads/*
+!/data/uploads/.gitkeep
