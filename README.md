@@ -402,9 +402,24 @@ docker-compose down
 docker-compose logs -f [service]
 ```
 
-## Specification
+## Contributing
 
-For the complete specification, see [privacy-runtime-auditor-spec-v2-ui.md](./privacy-runtime-auditor-spec-v2-ui.md)
+Contributions are welcome. Please keep changes focused, follow the existing monorepo structure, and include tests for behavior that affects crawling, rule evaluation, API contracts, persistence, or user-facing flows.
+
+Before opening a pull request, run:
+
+```bash
+npm run typecheck
+npm test
+```
+
+For frontend or end-to-end changes, also run:
+
+```bash
+npm run test:e2e
+```
+
+When changing database schema, update the Drizzle schema and migration list together. When changing scanner behavior, include evidence in tests or fixtures so regressions are easy to reproduce.
 
 ## License
 
