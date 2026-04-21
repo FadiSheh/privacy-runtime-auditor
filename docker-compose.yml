@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -66,7 +64,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./data/uploads:/app/data/uploads
+      - ./data/uploads:/app/data/uploads:Z
 
   frontend:
     build:
@@ -78,7 +76,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://api:3001
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - api
 
