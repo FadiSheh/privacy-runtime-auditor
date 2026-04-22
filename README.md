@@ -1,327 +1,296 @@
 # Privacy Runtime Auditor (PRA)
 
-A production-oriented runtime privacy compliance auditing platform for websites. PRA detects cookies, storage, scripts, requests, pixels, and third-party vendors by crawling websites dynamically and testing behavior across multiple consent scenarios.
+A production-oriented runtime privacy compliance auditing platform for websites. PRA detects cookies, storage, scripts, network requests, pixels, and third-party vendors by crawling websites dynamically and testing behaviour across multiple consent scenarios.
 
 ## Features
 
-- 🔍 **Dynamic Website Crawling** - Discover and analyze up to 15 relevant pages
-- 📋 **Multiple Consent Scenarios** - Test before consent, accept all, reject all, granular choices
-- 🎯 **Runtime Evidence Collection** - Cookies, localStorage, sessionStorage, IndexedDB, scripts, requests
-- 🧪 **Advanced Privacy Signal Detection** - Canvas/WebGL fingerprinting, session replay tools, key capture signals, pixel signatures, and cookie-blocker evasion heuristics
-- 🔄 **Privacy-Dependent Tracker Detection** - Highlights trackers that appear or disappear depending on consent state
-- 📊 **Findings & Scoring** - Rule-based analysis with severity levels and compliance scores
-- 📝 **Report Generation** - PDF and JSON reports with evidence and remediation hints
-- 🔄 **Historical Tracking** - Baseline scanning and regression detection
-- ✅ **Fully Tested** - Unit, integration, and E2E test coverage
+- **Dynamic website crawling** — discover and analyse up to 15 relevant pages
+- **Multiple consent scenarios** — test before consent, accept all, reject all, and granular choices
+- **Runtime evidence collection** — cookies, localStorage, sessionStorage, IndexedDB, scripts, network requests
+- **Advanced signal detection** — canvas/WebGL fingerprinting, session replay tools, keystroke capture, pixel signatures, cookie-blocker evasion
+- **Privacy-dependent tracker detection** — highlights trackers that appear or disappear depending on consent state
+- **Rule-based findings** — 12 deterministic rules with severity levels
+- **Compliance scoring** — four dimension scores (0–100) and an overall score
+- **Report generation** — PDF and JSON reports with evidence and remediation hints
+- **Historical tracking** — baseline scanning and regression detection
 
-## How It Works
-
-### Scan Pipeline
-
-1. **Crawl** — A headless Chromium browser visits the target website and discovers up to the configured number of pages by following internal links from the root URL.
-2. **Consent scenarios** — Each discovered page is tested under four distinct browser contexts:
-   - **Pre-consent** — Page loaded with no cookies, before any banner interaction. Captures what runs before the user has expressed any choice.
-   - **Accept all** — A consent banner "Accept all" action is simulated. Captures what is activated after full consent is given.
-   - **Reject all** — A "Reject all" action is simulated. The system verifies that tracking actually stops.
-   - **Granular (functional only)** — Only functional/necessary consent is granted. Used to detect whether granular controls are respected.
-3. **Evidence collection** — For each page × scenario combination, the runner collects:
-   - **Cookies** (name, domain, secure/httpOnly flags, SameSite, expiry)
-   - **localStorage** and **sessionStorage** entries
-   - **IndexedDB** databases and record counts
-   - **Network requests** (URLs, methods, initiators)
-   - **Script sources** loaded on the page
-   - **Browser instrumentation signals** (canvas/WebGL API calls, form listeners, input-correlated network sends)
-4. **Vendor classification** — Every cookie domain, request host, and script source is matched against the built-in vendor registry to identify known third-party trackers (Google Analytics, Meta Pixel, HotJar, etc.) and their declared purposes (analytics, advertising, functional, …).
-5. **Advanced signal synthesis** — Collected artifacts are summarized into higher-level privacy signals such as ad tracker counts, third-party cookies, cookie-blocker evasion heuristics, canvas fingerprinting, session recorders, keystroke capture, pixel presence, and Google remarketing indicators.
-6. **Rule evaluation** — The rules engine runs 12 deterministic rules across the collected evidence to produce findings with severity levels.
-7. **Policy parsing** — The site's privacy policy URL (if resolvable) is fetched and parsed to cross-reference which vendors are disclosed vs. which are observed at runtime.
-8. **Scoring** — Four compliance dimension scores (0–100) and an overall score are computed from the findings.
-9. **Report generation** — A structured JSON report and a human-readable PDF report are produced and stored.
-
-### What Is Analyzed
-
-| Evidence type | What PRA looks for |
-| --- | --- |
-| Cookies set pre-consent | Tracking identifiers fired before the user consents — a GDPR/ePrivacy violation |
-| Cookies after reject | Cookies that persist after "Reject all" — proof of ineffective opt-out |
-| Storage (localStorage / sessionStorage / IndexedDB) | Non-functional data stored without consent |
-| Network requests | Third-party beacons and pixels sent before or despite rejection |
-| Loaded scripts | Third-party SDKs executing before consent |
-| Advanced browser signals | Canvas/WebGL calls, form event listeners, and requests triggered during typing |
-| Vendor classification | Whether observed vendors are disclosed in the privacy policy |
-| Consent banner behavior | Whether a banner is present, whether reject-all is as easy as accept-all (dark patterns) |
-| Granular controls | Whether selecting "functional only" actually limits data collection |
-| Privacy-dependent trackers | Which non-essential trackers change behavior across no-consent, accept-all, reject-all, and granular scenarios |
-
-### Advanced Detection Coverage
-
-In addition to rule-based compliance findings, PRA now synthesizes a privacy-signal summary from runtime artifacts. This summary is exposed in `report.json`, rendered in the PDF report, and displayed in the scan UI.
-
-| Signal | Detection strategy |
-| --- | --- |
-| Ad trackers | Third-party requests, scripts, and iframes classified as advertising vendors |
-| Third-party cookies | Browser cookies whose domain is not first-party for the scanned site |
-| Cookie-blocker evasion | Heuristics across storage writes, ETag presence, identifier-bearing requests, apparent ID sync endpoints, and first-party cloaked vendor traffic |
-| Canvas fingerprinting | Instrumented calls to canvas and WebGL APIs such as `toDataURL`, `getImageData`, `measureText`, `getParameter`, and `readPixels` |
-| Session recorders | Vendor and script matching for tools such as Hotjar, FullStory, Mouseflow, Contentsquare, Crazy Egg, and Lucky Orange |
-| Keystroke capture | Form/input listeners plus network transmissions observed immediately after typing events |
-| Facebook / TikTok / X Pixel | URL, script, and vendor signatures for known pixel endpoints and libraries |
-| Google Analytics remarketing | Google Ads / DoubleClick / GA request patterns associated with remarketing audiences |
-
-These signals are heuristic detections. They are intended to surface likely privacy-relevant behavior quickly, not to replace a manual forensic review when a legal-grade conclusion depends on edge cases.
-
-### Understanding the Findings
-
-Each finding has a **rule ID**, a **severity** (critical / high / medium / low / info), a **page** where it was observed, and **evidence** (the specific cookies, requests, or vendors involved).
-
-| Rule | What it means |
-| --- | --- |
-| **R001** Non-essential tracking before consent | A tracking cookie, pixel, or script fired before the user interacted with the consent banner. This is a direct GDPR/ePrivacy violation. |
-| **R002** Missing consent banner | No recognizable consent mechanism was detected on the page. |
-| **R003** Ineffective reject all | Cookies or requests observed after "Reject all" that were also present after "Accept all" — rejection has no real effect. |
-| **R004** Dark patterns in consent UX | "Reject" is harder to reach than "Accept" (extra clicks, hidden options, pre-ticked boxes). |
-| **R005** Policy–runtime vendor mismatch | A third-party vendor observed at runtime is not mentioned anywhere in the privacy policy. |
-| **R006** Cookie without policy disclosure | A specific cookie (by name/domain) is set at runtime but not listed in the privacy policy cookie table. |
-| **R007** Rejection less effective than acceptance | Significantly fewer tracking cookies are cleared on rejection than would be expected — indicates a partial opt-out. |
-| **R008** Granular controls not persisted | After selecting granular consent (functional only), tracking vendors that should be off are still active. |
-| **R009** Storage without consent | Data written to localStorage, sessionStorage, or IndexedDB before the user consented. |
-| **R010** Unexpected vendor in policy | The privacy policy names a vendor that was never observed at runtime (not a violation, but useful for policy hygiene). |
-| **R011** Consent regression from baseline | A vendor or cookie that was absent in a previous baseline scan has appeared in the current scan. |
-| **R012** New vendor detected | A new third-party vendor appeared since the baseline was set. |
-
-### Compliance Scores
-
-Scores range from **0** (non-compliant) to **100** (fully compliant). A score of 0 does not mean the site is broken — it means the dimension has critical unresolved findings.
-
-| Dimension | What it measures |
-| --- | --- |
-| **Pre-consent** | How clean the page is before any user interaction |
-| **Consent UX** | Quality of the consent mechanism (banner presence, reject-all accessibility) |
-| **Blocking** | How effectively vendors are blocked after rejection |
-| **Policy** | Alignment between the runtime behaviour and the privacy policy |
-| **Overall** | Weighted aggregate of the four dimensions |
-
-## Architecture
-
-Multi-service monorepo architecture:
-
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **Backend API**: Fastify with Zod validation, rate limiting, CORS
-- **Worker Service**: BullMQ queue, Playwright browser automation
-- **Database**: PostgreSQL with Drizzle ORM
-- **Queue**: Redis + BullMQ
-- **Shared Packages**: URL logic, vendor registry, rules engine, policy parsing, report generation, browser runner
-
-## Project Structure
-
-```text
-├── apps/
-│   ├── frontend/              # Next.js web application
-│   ├── backend/               # Fastify API server
-│   └── worker/                # Background worker for crawling
-├── packages/
-│   ├── shared/                # Shared domain types
-│   ├── utils/                 # URL safety, validation
-│   ├── db/                    # Drizzle schema, migrations, seed
-│   ├── vendor-registry/       # Vendor classification
-│   ├── rules-engine/          # Finding rules and scoring
-│   ├── policy-parser/         # Privacy policy extraction
-│   ├── report-generator/      # JSON and PDF reporting
-│   └── browser-runner/        # Playwright scanning logic
-├── tests/
-│   ├── integration/           # API and worker integration tests
-│   ├── e2e/                   # Playwright end-to-end tests
-│   └── helpers/               # Fixture server for testing
-├── docker-compose.yml         # Local development environment
-├── playwright.config.ts       # E2E test configuration
-├── vitest.config.ts           # Unit/integration test configuration
-└── tsconfig.base.json         # Shared TypeScript config with path aliases
-```
+---
 
 ## Quick Start
 
-### Prerequisites
+### With Docker Compose (recommended)
 
-- Docker with Compose support (recommended for local development)
-- OR Node.js 22+, PostgreSQL 16+, Redis 7+
-
-### With Docker Compose (Recommended)
+**Prerequisites:** Docker with Compose plugin (Docker Desktop or `docker compose` v2 CLI).
 
 ```bash
-# Start all services (frontend, backend, worker, postgres, redis)
-docker compose up
+# 1. Clone and enter the repo
+git clone <repo-url> pra && cd pra
 
-# In a separate terminal, run migrations and seed data
-docker compose exec api npm --workspace apps/backend run db:migrate
-docker compose exec api npm --workspace apps/backend run db:seed
+# 2. Start all services — migrations and seed data run automatically
+docker compose up -d
 
-# Access the application
-# Frontend:  http://localhost:3000
-# Backend:   http://localhost:3001
+# 3. Tail logs to watch startup
+docker compose logs -f api
 ```
 
-If port 3000 is already in use, start the frontend on another host port:
+Once the `api` container logs `Server listening at http://0.0.0.0:3001` the stack is ready:
+
+| Service  | URL                                       |
+|----------|-------------------------------------------|
+| Frontend | <http://localhost:3000>                   |
+| Backend  | <http://localhost:3001>                   |
+| Health   | <http://localhost:3001/health>            |
+
+> **Port conflict on 3000?** Use `FRONTEND_PORT=3002 docker compose up -d`.
+
+To stop the stack:
 
 ```bash
-FRONTEND_PORT=3002 docker compose up
+docker compose down          # keep volumes (database persisted)
+docker compose down -v       # also wipe volumes (full reset)
 ```
 
-### Local Development (Without Docker)
+---
 
-1. Install dependencies:
+### Local Development (without Docker)
+
+**Prerequisites:** Node.js 22+, PostgreSQL 16, Redis 7.
+
+#### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-1. Set up environment:
+#### 2. Create your environment file
 
 ```bash
 cp .env.example .env
-# Edit .env with your PostgreSQL and Redis URLs
-export DATABASE_URL="postgresql://user:password@localhost:5432/pra_db"
-export REDIS_URL="redis://localhost:6379"
 ```
 
-1. Set up database:
+Edit `.env` and replace the Docker-internal hostnames with `localhost`:
+
+```env
+# Database — point to your local PostgreSQL
+DATABASE_URL=postgresql://pra_user:pra_password@localhost:5432/pra_db
+
+# Redis — point to your local Redis
+REDIS_URL=redis://localhost:6379
+
+# API
+API_PORT=3001
+NODE_ENV=development
+
+# Frontend — use localhost so the browser can reach the API
+NEXT_PUBLIC_API_URL=http://localhost:3001
+
+# Worker
+WORKER_CONCURRENCY=2
+STORAGE_PATH=./data/uploads
+
+# Change this before deploying
+JWT_SECRET=your-secret-key-change-in-production
+
+# Uncomment to allow scanning localhost URLs during development
+# ALLOW_PRIVATE_TARGETS=true
+```
+
+#### 3. Create the database and user
+
+```bash
+# In psql as a superuser:
+createuser pra_user --pwprompt        # password: pra_password
+createdb pra_db --owner=pra_user
+```
+
+#### 4. Run migrations and seed data
 
 ```bash
 npm run db:migrate
 npm run db:seed
 ```
 
-1. Start services in separate terminals:
+#### 5. Start all services
 
 ```bash
-# Terminal 1: Backend API
-npm --workspace apps/backend run dev
-
-# Terminal 2: Worker
-npm --workspace apps/worker run dev
-
-# Terminal 3: Frontend
-npm --workspace apps/frontend run dev
+npm run dev
 ```
 
-Access the application at `http://localhost:3000`
+This starts the backend API, worker, and frontend concurrently in the same terminal. Access the app at <http://localhost:3000>.
 
-## Testing
-
-### Unit Tests
+To start services individually in separate terminals:
 
 ```bash
-npm run test:unit
+# Terminal 1 — Backend API (port 3001)
+npm run dev:backend
+
+# Terminal 2 — Worker (no HTTP port, connects to queue)
+npm run dev:worker
+
+# Terminal 3 — Frontend (port 3000)
+npm run dev:frontend
 ```
 
-Tests for URL validation, vendor classification, scoring, policy parsing, report generation, database migrations, and browser discovery.
+---
 
-### Integration Tests
+## Architecture
 
-```bash
-npm run test:integration
+Multi-service monorepo built on npm workspaces.
+
+```
+├── apps/
+│   ├── frontend/          # Next.js 15, React 19, Tailwind CSS
+│   ├── backend/           # Fastify 5 API, Zod validation, rate limiting
+│   └── worker/            # BullMQ consumer, Playwright browser automation
+├── packages/
+│   ├── shared/            # Domain types and Zod schemas
+│   ├── utils/             # URL safety, validation, logger
+│   ├── db/                # Drizzle ORM schema, migrations, seed
+│   ├── vendor-registry/   # Third-party vendor classification
+│   ├── rules-engine/      # Finding rules (R001–R012) and scoring
+│   ├── policy-parser/     # Privacy policy HTML extraction
+│   ├── report-generator/  # JSON and PDF report output
+│   └── browser-runner/    # Playwright scanning and evidence collection
+├── tests/
+│   ├── integration/       # API and worker integration tests
+│   ├── e2e/               # Playwright end-to-end tests
+│   └── helpers/           # Fixture server for testing
+├── docker-compose.yml
+├── vitest.config.ts
+└── playwright.config.ts
 ```
 
-Full API and worker orchestration tests using in-memory database and no-op queue (memory mode).
+**Tech stack:**
 
-### End-to-End Tests
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 22 |
+| Language | TypeScript 5.8 |
+| HTTP | Fastify 5 |
+| Database | PostgreSQL 16 + Drizzle ORM |
+| Queue | Redis 7 + BullMQ |
+| Browser | Playwright 1.53 (Chromium) |
+| Frontend | Next.js 15, React 19, Tailwind CSS |
+| Tests | Vitest (unit/integration), Playwright test (E2E) |
 
-```bash
-npm run test:e2e
-```
+---
 
-Browser-driven Playwright tests simulating the full user flow from homepage to report viewing.
+## How It Works
 
-### Run All Tests
+### Scan pipeline
 
-```bash
-npm test
-```
+1. **Crawl** — Headless Chromium visits the target URL and discovers up to the configured number of pages by following internal links.
+2. **Consent scenarios** — Each page is tested under four browser contexts:
+   - **Pre-consent** — No cookies, no banner interaction. Captures what runs before the user makes any choice.
+   - **Accept all** — "Accept all" is simulated on the consent banner.
+   - **Reject all** — "Reject all" is simulated. Verifies that tracking actually stops.
+   - **Granular (functional only)** — Only necessary consent is granted. Detects whether granular controls are respected.
+3. **Evidence collection** — For each page × scenario combination: cookies, localStorage, sessionStorage, IndexedDB, network requests, script sources, and browser instrumentation signals (canvas/WebGL API calls, form listeners, input-correlated requests).
+4. **Vendor classification** — Every cookie domain, request host, and script is matched against the built-in vendor registry to identify known trackers and their declared purposes.
+5. **Signal synthesis** — Artifacts are summarised into higher-level privacy signals (ad trackers, fingerprinting, session recorders, pixel presence, etc.).
+6. **Rule evaluation** — 12 deterministic rules produce findings with severity levels.
+7. **Policy parsing** — The site's privacy policy is fetched and parsed to cross-reference disclosed vendors against observed ones.
+8. **Scoring** — Four compliance dimension scores (0–100) and an overall score are computed.
+9. **Report generation** — A JSON report and a human-readable PDF are produced and stored.
 
-This command runs both unit and integration suites, including browser instrumentation coverage and worker orchestration in `REDIS_URL=memory` mode.
+### Evidence collected
 
-## Build & Production
+| Evidence type | What PRA looks for |
+|---|---|
+| Cookies set pre-consent | Tracking identifiers fired before consent — a GDPR/ePrivacy violation |
+| Cookies after reject | Cookies that persist after "Reject all" — proof of ineffective opt-out |
+| Storage | Non-functional data in localStorage/sessionStorage/IndexedDB without consent |
+| Network requests | Third-party beacons and pixels sent before or despite rejection |
+| Loaded scripts | Third-party SDKs executing before consent |
+| Advanced browser signals | Canvas/WebGL calls, form listeners, requests triggered during typing |
+| Vendor classification | Whether observed vendors are disclosed in the privacy policy |
+| Consent banner | Whether a banner is present, whether reject is as easy as accept |
+| Granular controls | Whether "functional only" actually limits data collection |
 
-### Local Build
+### Advanced detection signals
 
-```bash
-npm run build
-```
+| Signal | Detection strategy |
+|---|---|
+| Ad trackers | Third-party requests/scripts/iframes classified as advertising vendors |
+| Third-party cookies | Cookies whose domain is not first-party for the scanned site |
+| Cookie-blocker evasion | Storage writes, ETag presence, ID-bearing requests, first-party cloaked traffic |
+| Canvas fingerprinting | `toDataURL`, `getImageData`, `measureText`, `getParameter`, `readPixels` API calls |
+| Session recorders | Vendor/script matching for Hotjar, FullStory, Mouseflow, Contentsquare, Crazy Egg, Lucky Orange |
+| Keystroke capture | Form/input listeners plus network sends correlated with typing events |
+| Facebook / TikTok / X Pixel | URL, script, and vendor signatures for known pixel endpoints |
+| Google remarketing | Ads/DoubleClick/GA request patterns associated with remarketing audiences |
 
-Builds all packages and apps for production.
+### Compliance scores
 
-### Type Checking
+Scores range from **0** (non-compliant) to **100** (fully compliant).
 
-```bash
-npm run typecheck
-```
+| Dimension | What it measures |
+|---|---|
+| **Pre-consent** | How clean the page is before any user interaction |
+| **Consent UX** | Quality of the consent mechanism (banner presence, reject-all accessibility) |
+| **Blocking** | How effectively vendors are blocked after rejection |
+| **Policy** | Alignment between runtime behaviour and the privacy policy |
+| **Overall** | Weighted aggregate of the four dimensions |
 
-Validates TypeScript across all packages and apps.
+### Finding rules (R001–R012)
 
-The repository typecheck includes the backend memory-queue path, the worker memory-cancellation path, browser instrumentation types, and the frontend report surfaces for privacy signals.
+| Rule | Severity | Description |
+|---|---|---|
+| R001 | critical | Non-essential tracking before consent |
+| R002 | high | Missing consent banner |
+| R003 | critical | Ineffective reject all — tracking persists after rejection |
+| R004 | medium | Dark patterns in consent UX |
+| R005 | high | Policy–runtime vendor mismatch |
+| R006 | medium | Cookie set at runtime but not listed in the privacy policy |
+| R007 | high | Rejection less effective than acceptance |
+| R008 | high | Granular controls not respected after functional-only selection |
+| R009 | high | Storage written without consent |
+| R010 | info | Vendor mentioned in policy but never observed at runtime |
+| R011 | high | Consent regression from baseline scan |
+| R012 | medium | New vendor detected since baseline |
 
-### Linting
+---
 
-```bash
-npm run lint
-```
-
-Runs ESLint on all source files.
-
-### Docker Compose Production Build
-
-```bash
-# Build images
-docker compose build
-
-# Start services
-docker compose up -d
-
-# Check logs
-docker compose logs -f
-
-# Stop services
-docker compose down
-```
-
-## API Endpoints
+## API Reference
 
 ### Projects
 
-- `POST /projects` - Create a new project
-- `GET /projects` - List all projects
-- `GET /projects/:id` - Get project details
-- `PATCH /projects/:id` - Update project
-- `DELETE /projects/:id` - Delete project
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/projects` | Create a project |
+| `GET` | `/projects` | List all projects |
+| `GET` | `/projects/:id` | Get project details |
+| `PATCH` | `/projects/:id` | Update project |
+| `DELETE` | `/projects/:id` | Delete project |
+| `GET` | `/projects/:id/scans` | List scans for a project |
+| `POST` | `/projects/:id/scans` | Start a new scan |
 
 ### Scans
 
-- `POST /projects/:id/scans` - Start a new scan
-- `GET /scans/:id/status` - Get scan status and progress
-- `GET /scans/:id/privacy-dependent-trackers` - List trackers whose behavior changes across consent scenarios
-- `GET /scans/:id/report.json` - Get JSON report
-- `GET /scans/:id/report.pdf` - Get PDF report
-- `POST /scans/:id/baseline` - Set as baseline scan
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/scans/:id` | Get scan metadata |
+| `GET` | `/scans/:id/status` | Scan progress (phase, page, % complete) |
+| `GET` | `/scans/:id/findings` | Findings with evidence |
+| `GET` | `/scans/:id/pages` | Discovered pages and their scenarios |
+| `GET` | `/scans/:id/policies` | Extracted privacy policies |
+| `GET` | `/scans/:id/privacy-dependent-trackers` | Trackers that change behaviour per consent |
+| `GET` | `/scans/:id/report.json` | Full JSON report |
+| `GET` | `/scans/:id/report.pdf` | PDF report download |
+| `GET` | `/scans/:id/diff` | Changes vs. baseline |
+| `POST` | `/scans/:id/set-baseline` | Mark scan as baseline |
+| `POST` | `/scans/:id/cancel` | Stop a running scan |
 
-### Vendors
+### Other
 
-- `GET /vendors` - List all vendors
-- `GET /health` - Health check
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/vendors` | Vendor registry |
+| `GET` | `/health` | Health check |
 
-## Memory Mode for Testing
+### Scan configuration
 
-For integration tests, the system supports in-memory database and no-op queue:
-
-```bash
-# Environment variables for tests
-export NODE_ENV=test
-export DATABASE_URL=memory        # Uses PGlite in-memory mode
-export REDIS_URL=memory           # Uses no-op queue implementation
-export ALLOW_PRIVATE_TARGETS=true # Allow scanning localhost/127.0.0.1
-```
-
-## Scan Configuration
-
-Scans accept a configuration object:
+When starting a scan (`POST /projects/:id/scans`), an optional `config` object is accepted:
 
 ```json
 {
@@ -332,94 +301,115 @@ Scans accept a configuration object:
 }
 ```
 
-## Findings Rules
+---
 
-The system evaluates 12 deterministic finding rules (R001-R012):
+## Configuration
 
-- **R001**: Non-essential tracking before consent
-- **R002**: Missing consent banner
-- **R003**: Ineffective reject all
-- **R004**: Dark patterns in consent UX
-- **R005**: Policy-runtime vendor mismatch
-- **R006**: Cookie without policy disclosure
-- **R007**: Rejection less effective than acceptance
-- **R008**: Granular controls not persisted
-- **R009**: Storage without consent
-- **R010**: Unexpected vendor in policy
-- **R011**: Consent regression from baseline
-- **R012**: New vendor detected
+All services are configured via environment variables. Copy `.env.example` as a starting point.
 
-## Environment Variables
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string (`memory` for in-memory test mode) |
+| `API_PORT` | `3001` | Backend HTTP port |
+| `NODE_ENV` | `development` | `development`, `production`, or `test` |
+| `NEXT_PUBLIC_API_URL` | — | API base URL as seen by the browser |
+| `WORKER_CONCURRENCY` | `2` | Parallel scan jobs |
+| `STORAGE_PATH` | `./data/uploads` | Directory for generated report files |
+| `JWT_SECRET` | — | Secret for auth token signing — **change before deploying** |
+| `ALLOW_PRIVATE_TARGETS` | `false` | Allow scanning `localhost`/`127.x.x.x` (for development) |
+| `FRONTEND_PORT` | `3000` | Host port mapped to the frontend container |
 
-```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/pra_db
+---
 
-# Redis
-REDIS_URL=redis://localhost:6379
+## Testing
 
-# Application
-NODE_ENV=development|production|test
-API_PORT=3001
-WORKER_CONCURRENCY=2
-STORAGE_PATH=./data/uploads
-
-# Testing
-ALLOW_PRIVATE_TARGETS=true      # Allow scanning localhost
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-## Development Commands
+### Unit tests
 
 ```bash
-# Watch mode for development
-npm run dev
-
-# Build all packages and apps
-npm run build
-
-# Clean build artifacts
-rm -rf dist .next .turbo
-
-# TypeScript validation
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Database migrations
-npm run db:migrate
-
-# Database seed
-npm run db:seed
-
-# Run full test suite
-npm test
-
-# Docker development
-docker-compose up
-docker-compose down
-docker-compose logs -f [service]
+npm run test:unit
 ```
 
-## Contributing
+Covers URL validation, vendor classification, scoring, policy parsing, report generation, database migrations, and browser discovery.
 
-Contributions are welcome. Please keep changes focused, follow the existing monorepo structure, and include tests for behavior that affects crawling, rule evaluation, API contracts, persistence, or user-facing flows.
-
-Before opening a pull request, run:
+### Integration tests
 
 ```bash
-npm run typecheck
-npm test
+npm run test:integration
 ```
 
-For frontend or end-to-end changes, also run:
+Full API and worker orchestration tests using PGlite (in-memory database) and no-op queue (`REDIS_URL=memory`). No external services required.
+
+### End-to-end tests
 
 ```bash
 npm run test:e2e
 ```
 
-When changing database schema, update the Drizzle schema and migration list together. When changing scanner behavior, include evidence in tests or fixtures so regressions are easy to reproduce.
+Browser-driven Playwright tests simulating the full user flow from homepage through to report viewing. Requires the stack to be running.
+
+### All tests
+
+```bash
+npm test   # runs test:unit + test:integration
+```
+
+### In-memory mode for CI / offline testing
+
+```bash
+export NODE_ENV=test
+export DATABASE_URL=memory          # PGlite in-memory database
+export REDIS_URL=memory             # No-op queue
+export ALLOW_PRIVATE_TARGETS=true   # Scan localhost fixture server
+```
+
+---
+
+## Build & Code Quality
+
+```bash
+# Build all packages and apps
+npm run build
+
+# TypeScript validation across the entire monorepo
+npm run typecheck
+
+# ESLint
+npm run lint
+```
+
+### Docker production build
+
+```bash
+docker compose build        # build all images
+docker compose up -d        # start detached
+docker compose logs -f      # stream logs
+docker compose down         # stop (keep data)
+docker compose down -v      # stop and wipe all data
+```
+
+---
+
+## Contributing
+
+Contributions are welcome. Keep changes focused, follow the monorepo structure, and include tests for anything that affects crawling, rule evaluation, API contracts, persistence, or user-facing flows.
+
+Before opening a pull request:
+
+```bash
+npm run typecheck
+npm test
+```
+
+For frontend or E2E changes:
+
+```bash
+npm run test:e2e
+```
+
+When changing the database schema, update the Drizzle schema and migration files together. When changing scanner behaviour, add evidence in tests or fixtures so regressions are easy to reproduce.
+
+---
 
 ## License
 
